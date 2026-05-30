@@ -14,11 +14,9 @@ import (
 )
 
 func main() {
-	log.Root().SetHandler(
-		//日志级别过滤器。只输出 >= INFO 的日志
-		log.LvlFilterHandler(
-			log.LvlInfo,
-			log.StreamHandler(os.Stdout, log.TerminalFormat(true)),
+	log.SetDefault(
+		log.NewLogger(
+			log.NewTerminalHandlerWithLevel(os.Stdout, log.LevelInfo, true),
 		),
 	)
 	// 根命令只负责挂载全局配置，并把配置对象提前放进 context，供子命令直接读取。
