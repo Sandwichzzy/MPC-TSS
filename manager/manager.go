@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"github.com/Sandwichzzy/tss/manager/metrics"
+	"github.com/Sandwichzzy/tss/manager/types"
 )
 
 type Manager struct {
@@ -16,5 +17,6 @@ type Manager struct {
 	askTimeout            time.Duration
 	signTimeout           time.Duration
 	stopGenKey            bool
+	stopChan              chan struct{}
 	metrics               *metrics.Metrics
 }
