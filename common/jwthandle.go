@@ -55,7 +55,7 @@ func (h *JwtHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	token, err := jwt.ParseWithClaims(strToken, &claims, h.keyFunc,
 		jwt.WithValidMethods([]string{"HS256"}), //只允许HS256
-		jwt.WithoutClaimsValidation()) //关闭JWT库默认检查。
+		jwt.WithoutClaimsValidation())           //关闭JWT库默认检查。
 
 	switch {
 	case err != nil:
