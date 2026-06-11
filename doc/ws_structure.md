@@ -896,31 +896,8 @@ Node 在 `Sign()` 中又必须检查该消息是否已经通过 ask 记录。
 
 Node 侧会拒绝签名。
 
-## 14. 推荐阅读顺序
 
-如果你准备继续深入这个仓库，建议按下面顺序看 WebSocket 相关代码：
-
-1. `manager/cmd.go`
-2. `ws/server/server.go`
-3. `ws/server/handler.go`
-4. `ws/client/client.go`
-5. `ws/client/tm/client.go`
-6. `node/signer/process.go`
-7. `node/signer/deal_msg.go`
-8. `node/signer/verify.go`
-9. `node/signer/sign.go`
-10. `node/signer/keygen.go`
-11. `manager/agreement.go`
-12. `manager/sign.go`
-13. `manager/keygen.go`
-
-这个顺序的好处是：
-
-- 先理解连接框架
-- 再理解 Node 如何分发消息
-- 最后再理解 Manager 如何把 WebSocket 嵌入业务流程
-
-## 15. 一句话总结
+## 14. 一句话总结
 
 这个项目的 WebSocket 框架，本质上是一个：
 

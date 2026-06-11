@@ -205,7 +205,7 @@ func (c *WSClient) dial() error {
 	timeStr := strconv.FormatInt(time.Now().Unix(), 10)
 	// The Manager authenticates websocket clients by verifying a signature over the timestamp.
 	digestBz := crypto.Keccak256Hash([]byte(timeStr)).Bytes()
-	sig, err := crypto.Sign(digestBz, c.PriKey)
+	sig, err := crypto.Sign(digestBz, c.PriKey) //使用节点私钥对摘要签名
 	if err != nil {
 		return err
 	}
@@ -237,6 +237,7 @@ func (c *WSClient) reconnect() error {
 
 	for {
 		backoffDuration := (1 << uint(attempt)) * time.Second
+		//最大 sleep 上限是 1 小时
 		if backoffDuration > defaultMaxSleepTime {
 			backoffDuration = defaultMaxSleepTime
 		}

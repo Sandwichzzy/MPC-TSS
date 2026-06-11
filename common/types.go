@@ -7,8 +7,8 @@ import "fmt"
 */
 type Method string
 
+// 请求/事件类型，用于区分 manager 和 node 的协议动作。
 const (
-	// 请求/事件类型，用于区分 manager 和 node 的协议动作。
 	AskMessageHash  Method = "askMessageHash"
 	TransactionSign Method = "TransactionSign"
 	SignSlash       Method = "signSlash"
@@ -21,16 +21,17 @@ func (m Method) String() string {
 }
 
 type TransactionSignRequest struct {
-	// 待签名消息哈希。
-	MessageHash string `json:"message_hash"`
-	// 选举或任务编号。
-	ElectionId uint64 `json:"election_id"`
-	// 上层业务请求 ID，便于幂等和追踪。
-	RequestId string `json:"request_id"`
+	MessageHash string `json:"message_hash"` // 待签名消息哈希。
+	ElectionId  uint64 `json:"election_id"`  // 选举或任务编号。
+	RequestId   string `json:"request_id"`   // 上层业务请求 ID，便于幂等和追踪。
 }
 
 func (tsr TransactionSignRequest) String() string {
 	return fmt.Sprintf("message_hash: %v, election_id: %d", tsr.MessageHash, tsr.ElectionId)
+}
+
+type AskResponse struct {
+	Result bool `json:"result"` // 结果为 true 表示节点接受该请求。
 }
 
 type NodeSignRequest struct {

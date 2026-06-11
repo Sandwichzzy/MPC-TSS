@@ -3,6 +3,7 @@ module github.com/Sandwichzzy/tss
 go 1.25.1
 
 require (
+	github.com/elliotchance/orderedmap/v2 v2.7.0
 	github.com/ethereum/go-ethereum v1.17.3
 	github.com/gin-gonic/gin v1.12.0
 	github.com/go-kit/kit v0.13.0
@@ -10,6 +11,8 @@ require (
 	github.com/gorilla/websocket v1.5.0
 	github.com/libp2p/go-libp2p/core v0.43.0-rc2
 	github.com/prometheus/client_golang v1.15.0
+	github.com/rcrowley/go-metrics v0.0.0-20200313005456-10cdbea86bc0
+	github.com/rs/zerolog v1.27.0
 	github.com/spf13/cobra v1.10.2
 	github.com/spf13/viper v1.21.0
 	github.com/syndtr/goleveldb v1.0.1-0.20210819022825-2ae1ddf74ef7
@@ -17,6 +20,7 @@ require (
 )
 
 require (
+	github.com/ProjectZKM/Ziren/crates/go-runtime/zkvm_runtime v0.0.0-20251001021608-1fe7b43fc4d6 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/btcsuite/btcd v0.22.1 // indirect
 	github.com/bytedance/gopkg v0.1.3 // indirect
@@ -67,7 +71,6 @@ require (
 	github.com/prometheus/procfs v0.9.0 // indirect
 	github.com/quic-go/qpack v0.6.0 // indirect
 	github.com/quic-go/quic-go v0.59.0 // indirect
-	github.com/rs/zerolog v1.27.0 // indirect
 	github.com/sagikazarmark/locafero v0.11.0 // indirect
 	github.com/sasha-s/go-deadlock v0.2.1-0.20190427202633-1595213edefa // indirect
 	github.com/sourcegraph/conc v0.3.1-0.20240121214520-5f936abd7ae8 // indirect
