@@ -2,7 +2,7 @@ package keysign
 
 import (
 	"github.com/Sandwichzzy/tss/node/tsslib/common"
-	common2 "github.com/binance-chain/tss-lib/common"
+	common2 "github.com/bnb-chain/tss-lib/common"
 )
 
 type Response struct {

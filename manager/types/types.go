@@ -27,5 +27,71 @@ type Context struct {
 	approvers      []string
 	unApprovers    []string
 	electionId     uint64
-	MessageHash    string
+	messageHash    string
+}
+
+func NewContext() Context {
+	return Context{
+		ctx: context.Background(),
+	}
+}
+
+func (c Context) RequestId() string {
+	return c.requestId
+}
+
+func (c Context) TssInfos() *TssCommitteeInfo {
+	return c.tssInfo
+}
+func (c Context) AvailableNodes() []string {
+	return c.availableNodes
+}
+func (c Context) Approvers() []string {
+	return c.approvers
+}
+
+func (c Context) UnApprovers() []string {
+	return c.unApprovers
+}
+
+func (c Context) ElectionId() uint64 {
+	return c.electionId
+}
+func (c Context) MessageHash() string {
+	return c.messageHash
+}
+
+func (c Context) WithRequestId(requestId string) Context {
+	c.requestId = requestId
+	return c
+}
+
+func (c Context) WithTssInfo(tssInfos *TssCommitteeInfo) Context {
+	c.tssInfo = tssInfos
+	return c
+}
+
+func (c Context) WithAvailableNodes(nodes []string) Context {
+	c.availableNodes = nodes
+	return c
+}
+
+func (c Context) WithApprovers(nodes []string) Context {
+	c.approvers = nodes
+	return c
+}
+
+func (c Context) WithUnApprovers(nodes []string) Context {
+	c.unApprovers = nodes
+	return c
+}
+
+func (c Context) WithElectionId(election uint64) Context {
+	c.electionId = election
+	return c
+}
+
+func (c Context) WithMessageHashRoot(MessageHash string) Context {
+	c.messageHash = MessageHash
+	return c
 }
