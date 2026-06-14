@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"math/big"
-	"strings"
 
 	tsscommon "github.com/Sandwichzzy/tss/common"
 	"github.com/Sandwichzzy/tss/message"
@@ -244,7 +243,7 @@ func (p *Processor) storeMessageHash(electionId uint64, messageHash string, work
 	}
 	absentNodes := make([]string, 0)
 	for _, n := range paricipants {
-		if !existsIgnoreCase(workingNodes, n) {
+		if !tsscommon.ExistsIgnoreCase(workingNodes, n) {
 			absentNodes = append(absentNodes, n)
 		}
 	}
@@ -258,16 +257,6 @@ func (p *Processor) storeMessageHash(electionId uint64, messageHash string, work
 		return err
 	}
 	return nil
-}
-
-func existsIgnoreCase(set []string, find string) bool {
-	find = strings.ToLower(find)
-	for _, s := range set {
-		if strings.ToLower(s) == find {
-			return true
-		}
-	}
-	return false
 }
 
 func (p *Processor) removeWaitEvent(key string) {
