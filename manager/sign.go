@@ -1,1 +1,210 @@
 package manager
+
+import (
+	"context"
+	"encoding/hex"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"strings"
+	"sync"
+	"time"
+
+	tss "github.com/Sandwichzzy/tss/common"
+	"github.com/Sandwichzzy/tss/manager/types"
+	"github.com/Sandwichzzy/tss/ws/server"
+	"github.com/ethereum/go-ethereum/crypto"
+	"github.com/ethereum/go-ethereum/log"
+	tmjson "github.com/tendermint/tendermint/libs/json"
+	tmtypes "github.com/tendermint/tendermint/rpc/jsonrpc/types"
+)
+
+type Counter struct {
+	count map[string]int
+}
+
+func (c *Counter) increment(node string) {
+	if c.count == nil {
+		c.count = make(map[string]int, 0)
+	}
+	num := c.count[node]
+	c.count[node] = num + 1
+}
+
+// 如果达到阈值 多数节点认定它是坏节点
+func (c *Counter) satisfied(minNumber int) []string {
+	var ret []string
+	for n, ct := range c.count {
+		if ct >= minNumber {
+			ret = append(ret, n)
+		}
+	}
+	return ret
+}
+
+// sign 的流程是：
+//
+// 1. 用 `requestId` 注册响应通道
+// 2. 构造 `NodeSignRequest`
+// 3. 给 approvers 发送 `TransactionSign`
+// 4. 从 `respChan` 收各个节点的响应
+// 5. 如果收到成功签名，校验签名是否能被 `ClusterPublicKey` 验证
+// 6. 返回合法的 `SignResponse`
+//
+// 这里还有两个重要点：
+//
+// 1. Manager 不是拿到任何一个响应就盲信，而是会用聚合公钥再次验签
+// 2. 返回错误时，会根据错误码区分是否是 `CulpritErrorCode` 判断节点是否作恶（暂时没用到）
+func (m *Manager) sign(ctx types.Context, request interface{}, digestBz []byte, method tss.Method) (tss.SignResponse, error) {
+	if method != tss.TransactionSign {
+		log.Error("Invalid method type", "method", method)
+		return tss.SignResponse{}, errors.New("invalid method type")
+	}
+
+	respChan := make(chan server.ResponseMsg)
+	stopChan := make(chan struct{})
+
+	if err := m.wsServer.RegisterResChannel(ctx.RequestId(), respChan, stopChan); err != nil {
+		log.Error("failed to register response channel at signing step", err)
+		return tss.SignResponse{}, err
+	}
+	log.Info("Registered ResChannel with requestID", "requestID", ctx.RequestId())
+
+	errSendChan := make(chan struct{})
+	responseNodes := make(map[string]struct{})
+	counter := &Counter{}
+
+	var validSignResponse *tss.SignResponse
+	wg := &sync.WaitGroup{}
+	wg.Add(1)
+
+	go func() {
+		cctx, cancel := context.WithTimeout(context.Background(), m.signTimeout)
+		defer func() {
+			log.Info("exit signing process")
+			cancel()
+			wg.Done()
+			close(stopChan)
+		}()
+		for {
+			select {
+			case <-errSendChan:
+				return
+			case resp := <-respChan:
+				log.Info(fmt.Sprintf("signed response: %s", resp.RpcResponse.String()), "node", resp.SourceNode)
+				if !tss.ExistsIgnoreCase(ctx.Approvers(), resp.SourceNode) { // ignore the message which the sender should not be involved in approver set
+					continue
+				}
+				func() {
+					defer func() {
+						//记录已响应节点
+						responseNodes[resp.SourceNode] = struct{}{}
+					}()
+					if resp.RpcResponse.Error != nil {
+						//TSS 找出了作恶节点
+						if resp.RpcResponse.Error.Code == tss.CulpritErrorCode {
+							_, ok := responseNodes[resp.SourceNode]
+							if ok { // ignore if handled
+								return
+							}
+
+							culpritData := resp.RpcResponse.Error.Data
+							culprits := strings.Split(culpritData, ",")
+							culprits = deDuplication(culprits)
+							for _, culprit := range culprits {
+								if tss.ExistsIgnoreCase(ctx.Approvers(), culprit) {
+									//计算多少个节点认为这个节点作恶
+									counter.increment(culprit)
+								}
+							}
+						} else {
+							log.Error("Unrecognized error code", "err_code", resp.RpcResponse.Error.Code, "err_data", resp.RpcResponse.Error.Data, "err_message", resp.RpcResponse.Error.Message)
+						}
+						return
+					}
+					var signResponse tss.SignResponse
+					if err := tmjson.Unmarshal(resp.RpcResponse.Result, &signResponse); err != nil {
+						log.Error("failed to unmarshal sign response", err)
+						return
+					}
+					//验证签名
+					//1.得到 TSS Cluster 公钥
+					poolPubKeyBz, _ := hex.DecodeString(ctx.TssInfos().ClusterPubKey)
+					if len(signResponse.Signature) < 64 {
+						log.Error(fmt.Sprintf("invalid signature, expected length is no less than 64, actual length is %d", len(signResponse.Signature)))
+						return
+					}
+					//验证 是否真的签出了 digestBz
+					if !crypto.VerifySignature(poolPubKeyBz, digestBz, signResponse.Signature[:64]) {
+						log.Error("illegal signature")
+						return
+					}
+
+					validSignResponse = &signResponse
+					return
+
+				}()
+			case <-cctx.Done():
+				log.Warn("wait for signature timeout")
+				return
+			default:
+				if len(responseNodes) == len(ctx.Approvers()) {
+					log.Info("received all signing responses")
+					return
+				}
+			}
+		}
+	}()
+	m.sendSignReqToNodes(ctx, request, method, errSendChan)
+	wg.Wait()
+
+	if validSignResponse == nil {
+		return tss.SignResponse{}, nil
+	}
+
+	return *validSignResponse, nil
+
+}
+
+func (m *Manager) sendSignReqToNodes(ctx types.Context, request interface{}, method tss.Method, errSendChan chan struct{}) {
+	nodes := ctx.Approvers()
+	nodeRequest := tss.NodeSignRequest{
+		ClusterPublicKey: ctx.TssInfos().ClusterPubKey,
+		Timestamp:        time.Now().UnixMilli(),
+		Nodes:            ctx.Approvers(),
+		RequestBody:      request,
+	}
+	requestBz, err := json.Marshal(nodeRequest)
+	if err != nil {
+		log.Error("failed to marshal node request", "err", err)
+		errSendChan <- struct{}{}
+		return
+	}
+
+	rpcRequest := tmtypes.NewRPCRequest(tmtypes.JSONRPCStringID(ctx.RequestId()), method.String(), requestBz)
+	for _, node := range nodes {
+		go func(node string, request tmtypes.RPCRequest) {
+			if err := m.wsServer.SendMsg(
+				server.RequestMsg{
+					RpcRequest: request,
+					TargetNode: node,
+				}); err != nil {
+				log.Error("failed to send sign request to nodes", err)
+				errSendChan <- struct{}{}
+				return
+			}
+		}(node, rpcRequest)
+	}
+}
+
+func deDuplication(nodes []string) []string {
+	var r []string
+	h := make(map[string]bool)
+	for _, node := range nodes {
+		if _, ok := h[node]; !ok {
+			r = append(r, node)
+			h[node] = true
+		}
+	}
+	return r
+}

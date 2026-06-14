@@ -3,6 +3,7 @@ package manager
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"sync"
 
@@ -26,6 +27,11 @@ import (
 // - `Approvers`
 // - `UnApprovers`
 func (m *Manager) agreement(ctx types.Context, request interface{}, method tss.Method) (types.Context, error) {
+	if method != tss.AskMessageHash {
+		log.Error("Invalid method type", "method", method)
+		return types.Context{}, errors.New("invalid method type")
+	}
+
 	respChan := make(chan server.ResponseMsg)
 	stopChan := make(chan struct{})
 
@@ -125,7 +131,7 @@ func (m *Manager) agreement(ctx types.Context, request interface{}, method tss.M
 }
 
 func (m *Manager) askNodes(ctx types.Context, request []byte, method tss.Method, stopChan chan struct{}, errSendChan chan struct{}) {
-	log.Info("start to sendTonNodes", "number", len(ctx.AvailableNodes()))
+	log.Info("start to send Ask to Nodes", "number", len(ctx.AvailableNodes()))
 	nodes := ctx.AvailableNodes()
 	for i := range nodes {
 		node := nodes[i]
