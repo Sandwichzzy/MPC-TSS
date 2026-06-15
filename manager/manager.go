@@ -1,9 +1,11 @@
 package manager
 
 import (
+	"fmt"
 	"sync"
 	"time"
 
+	"github.com/Sandwichzzy/tss/common"
 	tss "github.com/Sandwichzzy/tss/common"
 	"github.com/Sandwichzzy/tss/config"
 	"github.com/Sandwichzzy/tss/manager/metrics"
@@ -96,7 +98,17 @@ func (m *Manager) Keygen(request tss.KeygenRequest) (string, error) {
 }
 
 func (m *Manager) availableNodes(tssMembers []string) []string {
-	return nil
+	aliveNodes := m.wsServer.AliveNodes()
+	m.metrics.OnlineNodesCount.Set(float64(len(aliveNodes)))
+	log.Info("check available nodes", "expected", fmt.Sprintf("%v", tssMembers), "alive nodes", fmt.Sprintf("%v", aliveNodes))
+
+	availableNodes := make([]string, 0)
+	for _, node := range aliveNodes {
+		if common.ExistsIgnoreCase(tssMembers, node) {
+			availableNodes = append(availableNodes, node)
+		}
+	}
+	return availableNodes
 }
 
 func (m *Manager) afterTransactionSign(ctx types.Context, MessageHash string, absentNodes []string) error {
