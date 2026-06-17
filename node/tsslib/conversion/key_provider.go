@@ -34,6 +34,18 @@ func GetPeerIDFromPubKey(pubkey string) (peer.ID, error) {
 	return peer.IDFromPublicKey(ppk)
 }
 
+func GetPeerIDsFromPubKeys(pubkeys []string) ([]peer.ID, error) {
+	var peerIDs []peer.ID
+	for _, item := range pubkeys {
+		peerID, err := GetPeerIDFromPubKey(item)
+		if err != nil {
+			return nil, err
+		}
+		peerIDs = append(peerIDs, peerID)
+	}
+	return peerIDs, nil
+}
+
 func GetPubKeyFromPeerID(pID string) (string, error) {
 	peerID, err := peer.Decode(pID)
 	if err != nil {

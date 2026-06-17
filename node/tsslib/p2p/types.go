@@ -19,13 +19,6 @@ func (al *AddrList) Type() string {
 	panic("implement me")
 }
 
-//type Config struct {
-//	RendezvousString string
-//	Port             int
-//	BootstrapPeers   []string
-//	ExternalIP       string
-//}
-
 func (al *AddrList) String() string {
 	addresses := make([]string, len(*al))
 	for i, addr := range *al {
