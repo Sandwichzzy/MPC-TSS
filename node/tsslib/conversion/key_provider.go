@@ -14,12 +14,11 @@ func CheckKeyOnCurve(pk string) (bool, error) {
 	if err != nil {
 		return false, fmt.Errorf("fail to parse pub key(%s): %w", pk, err)
 	}
-	bPk, err := btcec.ParsePubKey(pubKey)
+	_, err = btcec.ParsePubKey(pubKey)
 	if err != nil {
 		return false, err
 	}
-	curve := btcec.S256()
-	return curve.IsOnCurve(bPk.X(), bPk.Y()), nil
+	return true, nil
 }
 
 func GetPeerIDFromPubKey(pubkey string) (peer.ID, error) {

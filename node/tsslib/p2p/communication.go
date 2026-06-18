@@ -328,6 +328,12 @@ func (c *Communication) bootStrapConnectivityCheck() error {
 // libp2p initialization
 // ==============================
 
+// 1. 用节点私钥创建 libp2p host
+// 2. 注册 `/p2p/tss` 的 stream handler
+// 3. 启动 Kademlia DHT
+// 4. 尝试连接 bootstrap peers
+// 5. 用 rendezvous 广播自身
+// 6. 做 bootstrap connectivity check
 func (c *Communication) startChannel(privKeyBytes []byte) error {
 	ctx := context.Background()
 	// load private key
@@ -473,7 +479,7 @@ func (c *Communication) Start(priKeyBytes []byte) error {
 	err := c.startChannel(priKeyBytes)
 	if err == nil {
 		c.wg.Add(1)
-		go c.ProcessBroadcast()
+		go c.ProcessBroadcast() //启动 `ProcessBroadcast()` 消费出站广播队列
 	}
 	return err
 }

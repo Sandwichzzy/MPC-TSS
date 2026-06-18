@@ -26,6 +26,7 @@ import (
 	"github.com/rs/zerolog/log"
 )
 
+// ecdsa 加上0x04
 const poolPublicKey = 66
 
 type TssServer struct {
@@ -37,7 +38,7 @@ type TssServer struct {
 	preParams        *bkeygen.LocalPreParams
 	tssKeyGenLocker  *sync.Mutex
 	stopChan         chan struct{}
-	stateManager     storage2.ILocalStateManager
+	stateManager     storage2.LocalStateManager
 	//secretsManager      storage2.SecretsManager
 	//shamirManager       storage2.ShamirManager
 	privateKey          *ecdsa.PrivateKey
@@ -47,6 +48,19 @@ type TssServer struct {
 	tssGroupMemberStore types.TssMemberStore
 }
 
+// NewTss 它主要做这些事情：
+//
+// 1. 从节点私钥导出压缩公钥和 libp2p peer id
+// 2. 初始化本地状态存储 `FileStateMgr`
+// 3. 按配置决定是否启用：
+// - 本地文件状态存储
+// - secrets manager
+// - shamir manager
+// 4. 读取历史地址簿 `address_book.seed`，和配置里的 bootstrap peers 合并
+// 5. 创建 `Communication`
+// 6. 加载或生成 keygen preparams
+// 7. 启动 libp2p host / DHT / bootstrap 连接
+// 8. 组装成 `TssServer`
 func NewTss(
 	cmdBootstrapPeers string,
 	waitFullConnected bool,
@@ -205,6 +219,7 @@ func (t *TssServer) GetLocalPeerID() string {
 	return t.p2pCommunication.GetLocalPeerID()
 }
 
+// 基于request类型，并参与生成本轮请求唯一的 msgID
 func (t *TssServer) requestToMsgId(request interface{}) (string, error) {
 	var dat []byte
 	var keys []string
@@ -227,6 +242,7 @@ func (t *TssServer) requestToMsgId(request interface{}) (string, error) {
 	return common2.MsgToHashString(dat)
 }
 
+// 在真正启动协议前，`TssServer` 会先做输入校验：
 func (t *TssServer) requestCheck(request interface{}) error {
 	var threshold int
 	switch value := request.(type) {

@@ -31,8 +31,8 @@ type KeygenLocalState struct {
 	Threshold       int                       `json:"threshold"`        // 本次 keygen 使用的门限参数。
 }
 
-// ILocalStateManager 抽象“keygen 本地状态存到哪里”。 当前仓库有本地文件、SecretsManager 和 Shamir 三套实现。
-type ILocalStateManager interface {
+// LocalStateManager 抽象“keygen 本地状态存到哪里”。 当前仓库有本地文件、SecretsManager 和 Shamir 三套实现。
+type LocalStateManager interface {
 	SaveLocalState(state KeygenLocalState) error
 	GetLocalState(pubKey string) (KeygenLocalState, error)
 	SaveAddressBook(addressBook map[peer.ID]p2p.AddrList) error
