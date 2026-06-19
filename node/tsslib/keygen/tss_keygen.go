@@ -38,10 +38,10 @@ func NewTssKeyGen(localP2PID string,
 	preParam *keygen.LocalPreParams,
 	msgID string,
 	stateManager storage2.LocalStateManager,
-//secretsEnable bool,
-//secretsManager storage2.SecretsManager,
-//shamirEnable bool,
-//shamirManager storage2.ShamirManager,
+	//secretsEnable bool,
+	//secretsManager storage2.SecretsManager,
+	//shamirEnable bool,
+	//shamirManager storage2.ShamirManager,
 	privateKey *ecdsa.PrivateKey,
 	p2pComm *p2p.Communication,
 	thresHold int) *TssKeyGen {
@@ -65,4 +65,8 @@ func NewTssKeyGen(localP2PID string,
 
 func (tKeyGen *TssKeyGen) GetTssKeyGenChannels() chan *p2p.Message {
 	return tKeyGen.tssCommonStruct.TssMsg
+}
+
+func (tKeyGen *TssKeyGen) GetTssCommonStruct() *common2.TssCommon {
+	return tKeyGen.tssCommonStruct
 }

@@ -1,11 +1,13 @@
 package conversion
 
 import (
+	"crypto/sha256"
 	"encoding/hex"
 	"errors"
 	"fmt"
 
 	"github.com/bnb-chain/tss-lib/crypto"
+	"github.com/bnb-chain/tss-lib/tss"
 	"github.com/btcsuite/btcd/btcec/v2"
 	ethcrypto "github.com/ethereum/go-ethereum/crypto"
 	crypto2 "github.com/libp2p/go-libp2p/core/crypto"
@@ -51,4 +53,39 @@ func GetTssPubKey(pubKeyPoint *crypto.ECPoint) (string, []byte, []byte, error) {
 	address := ethcrypto.PubkeyToAddress(*pubKey.ToECDSA()).Bytes()
 
 	return pubKeyStr, address, uncompressed, nil
+}
+
+func AccPubKeysFromPartyIDs(partyIDs []string, partyIDMap map[string]*tss.PartyID) ([]string, error) {
+	pubKeys := make([]string, 0)
+	for _, partyID := range partyIDs {
+		blameParty, ok := partyIDMap[partyID]
+		if !ok {
+			return nil, errors.New("cannot find the blame party")
+		}
+		blamedPubKey, err := PartyIDtoPubKey(blameParty)
+		if err != nil {
+			return nil, err
+		}
+		pubKeys = append(pubKeys, blamedPubKey)
+	}
+	return pubKeys, nil
+}
+
+func PartyIDtoPubKey(party *tss.PartyID) (string, error) {
+	if party == nil || !party.ValidateBasic() {
+		return "", errors.New("invalid party")
+	}
+	partyKeyBytes := party.GetKey()
+	pubKey := hex.EncodeToString(partyKeyBytes)
+
+	return pubKey, nil
+}
+
+func BytesToHashString(msg []byte) (string, error) {
+	h := sha256.New()
+	_, err := h.Write(msg)
+	if err != nil {
+		return "", fmt.Errorf("fail to caculate sha256 hash: %w", err)
+	}
+	return hex.EncodeToString(h.Sum(nil)), nil
 }

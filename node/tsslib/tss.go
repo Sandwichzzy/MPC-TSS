@@ -200,10 +200,11 @@ func NewTss(
 	return &tssServer, nil
 }
 
-//func (t *TssServer) Start() error {
-//	log.Info().Msg("Starting the TSS servers")
-//	return nil
-//}
+func (t *TssServer) Start() error {
+	//TODO:这里只打印
+	log.Info().Msg("Starting the TSS servers")
+	return nil
+}
 
 func (t *TssServer) Stop() {
 	close(t.stopChan)

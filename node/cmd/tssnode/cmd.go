@@ -1,12 +1,23 @@
 package tssnode
 
 import (
+	"encoding/hex"
 	"errors"
+	"fmt"
+	"os"
+	"os/signal"
 	"strconv"
+	"syscall"
 
 	"github.com/Sandwichzzy/tss/config"
+	"github.com/Sandwichzzy/tss/node/server"
+	sign "github.com/Sandwichzzy/tss/node/signer"
 	"github.com/Sandwichzzy/tss/node/store"
+	"github.com/Sandwichzzy/tss/node/tsslib"
+	"github.com/Sandwichzzy/tss/node/tsslib/common"
+	"github.com/Sandwichzzy/tss/node/tsslib/conversion"
 	"github.com/ethereum/go-ethereum/crypto"
+	ethcrypto "github.com/ethereum/go-ethereum/crypto"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 	"github.com/spf13/cobra"
@@ -62,34 +73,75 @@ func runNode(cmd *cobra.Command) error {
 	}
 
 	// tssInstance 是 Node 的核心：负责 P2P 协议、keygen 和 sign 流程。
-	//tssInstance, err := tsslib.NewTss(
-	//	cfg.Node.BootstrapPeers,
-	//	waitPeersFullConnected,
-	//	p2pPort,
-	//	privKey,
-	//	cfg.Node.BaseDir,
-	//	common.TssConfig{
-	//		PreParamTimeout: cfg.Node.PreParamTimeout,
-	//		KeyGenTimeout:   cfg.Node.KeyGenTimeout,
-	//		KeySignTimeout:  cfg.Node.KeySignTimeout,
-	//		EnableMonitor:   false,
-	//	},
-	//	cfg.Node.PreParamFile,
-	//	cfg.Node.ExternalIP,
-	//	cfg.Node.Secrets.Enable,
-	//	cfg.Node.Secrets.SecretId,
-	//	cfg.Node.Shamir,
-	//	store,
-	//)
+	tssInstance, err := tsslib.NewTss(
+		cfg.Node.BootstrapPeers,
+		waitPeersFullConnected,
+		p2pPort,
+		privKey,
+		cfg.Node.BaseDir,
+		common.TssConfig{
+			PreParamTimeout: cfg.Node.PreParamTimeout,
+			KeyGenTimeout:   cfg.Node.KeyGenTimeout,
+			KeySignTimeout:  cfg.Node.KeySignTimeout,
+			EnableMonitor:   false,
+		},
+		cfg.Node.PreParamFile,
+		cfg.Node.ExternalIP,
+		cfg.Node.Secrets.Enable,
+		cfg.Node.Secrets.SecretId,
+		cfg.Node.Shamir,
+		store,
+	)
 
-	//if err != nil {
-	//	log.Fatal().Err(err).Msg("fail to create tss server instance")
-	//	return err
-	//}
-	//if err := tssInstance.Start(); err != nil {
-	//	log.Error().Err(err).Msg("fail to start tss server")
-	//	return err
-	//}
+	if err != nil {
+		log.Fatal().Err(err).Msg("fail to create tss server instance")
+		return err
+	}
+	if err := tssInstance.Start(); err != nil {
+		log.Error().Err(err).Msg("fail to start tss server")
+		return err
+	}
+	// 公钥和地址派生出来后，会传给 signer 和 HTTP 层使用。
+	pubkey := crypto.CompressPubkey(&privKey.PublicKey)
+	pubkeyHex := hex.EncodeToString(pubkey)
+
+	localPubkeyBytes := crypto.FromECDSAPub(&privKey.PublicKey)
+	// 去掉前缀字节后，保留 64 字节的裸公钥内容。
+	localPubkeyBytes = localPubkeyBytes[1:]
+
+	address := ethcrypto.PubkeyToAddress(privKey.PublicKey)
+
+	// signer 负责把外部请求转换成底层 tss 协议动作。
+	signer, err := sign.NewProcessor(cfg, tssInstance, privKey, localPubkeyBytes, pubkeyHex, store, address)
+	if err != nil {
+		log.Error().Err(err).Msg("fail to new signer ")
+		return err
+	}
+	signer.Start()
+
+	// HTTP 服务提供节点侧的控制接口和健康检查。
+	hs, err := server.NewHttpServer(cfg.Node.HttpAddr, tssInstance, signer, nonProd, cfg.Node.JwtSecret)
+	if err != nil {
+		log.Error().Err(err).Msg("fail to create http server")
+		return err
+	}
+	if err := hs.Start(); err != nil {
+		log.Error().Err(err).Msg("fail to start http server")
+		return err
+	}
+
+	quit := make(chan os.Signal, 1)
+	// 和 manager 一样，节点通过信号触发有序退出。
+	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
+	<-quit
+	log.Info().Msg("stop signal received ")
+
+	tssInstance.Stop()
+	signer.Stop()
+	hs.Stop()
+	log.Info().Msg("server stopped")
+
+	return nil
 }
 
 func PeerIDCommand() *cobra.Command {
@@ -97,7 +149,32 @@ func PeerIDCommand() *cobra.Command {
 		Use:   "parse-peer-id",
 		Short: "parse peer id of the key",
 		RunE: func(cmd *cobra.Command, args []string) error {
+			// 支持直接输入公钥，或者输入私钥后再推导出公钥。
+			publicKey, _ := cmd.Flags().GetString("pub-key")
+			privateKey, _ := cmd.Flags().GetString("pri-key")
+			var publicBz []byte
+			if len(publicKey) != 0 {
+				decoded, err := hex.DecodeString(publicKey)
+				if err != nil {
+					return err
+				}
+				publicBz = decoded
+			} else if len(privateKey) != 0 {
+				privKey, err := crypto.HexToECDSA(privateKey)
+				if err != nil {
+					return err
+				}
+				pubkeybytes := crypto.CompressPubkey(&privKey.PublicKey)
+				publicBz = pubkeybytes
+			} else {
+				return errors.New("name|pub-key|pri-key at least one needs to be specified")
+			}
 
+			peerId, err := conversion.GetPeerIDFromSecp256PubKey(publicBz)
+			if err != nil {
+				return err
+			}
+			fmt.Println(peerId)
 			return nil
 		},
 	}

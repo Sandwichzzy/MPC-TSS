@@ -241,32 +241,63 @@ Manager WS request  |  keygen.go / sign.go                |
 
 Node 之间 libp2p 上传输的最外层对象是 `messages.WrappedMessage`，定义在 `node/tsslib/messages/p2p_message.go`。
 
-它包含：
+**1.WrappedMessage** 它包含：
 
-| 字段 | 含义 |
-| --- | --- |
+| 字段          | 含义                                        |
+| ------------- | ------------------------------------------- |
 | `MessageType` | 当前消息属于 keygen、keysign 还是 task done |
-| `MsgID` | 当前这次协议实例的唯一标识 |
-| `Payload` | 真正的负载 |
+| `MsgID`       | 当前这次协议实例的唯一标识                  |
+| `Payload`     | 真正的负载                                  |
+
+**2. WireMessage**
 
 如果 `MessageType` 是 `TSSKeyGenMsg` 或 `TSSKeySignMsg`，那么 `Payload` 里又是一个 `messages.WireMessage`：
 
-| 字段 | 含义 |
-| --- | --- |
-| `Routing` | `tss.MessageRouting`，表示 from / to / broadcast |
-| `RoundInfo` | 当前 round 名称，例如 `KGRound1Message` |
-| `Message` | 真正的 round 二进制 |
-| `Sig` | 发送节点对该消息做的 ECDSA 签名 |
+| 字段        | 含义                                             |
+| ----------- | ------------------------------------------------ |
+| `Routing`   | `tss.MessageRouting`，表示 from / to / broadcast |
+| `RoundInfo` | 当前 round 名称，例如 `KGRound1Message`          |
+| `Message`   | 真正的 round 二进制                              |
+| `Sig`       | 发送节点对该消息做的 ECDSA 签名                  |
 
-而 `WireMessage.Message` 本身再解开后，才是 `tss-lib` 的 `WireBytes()` 产物。
+**3. BulkWireMsg**
 
-也就是说，当前消息封装有三层：
+作用：这是 WireMessage.Message 里面真正装着的内容 。它又包了一层：
+
+| 字段            | 含义                                                         |
+| --------------- | ------------------------------------------------------------ |
+| `WiredBulkMsg`  | []byte 最内层真正要喂给 tss-lib 的原始 wire bytes            |
+| `MsgIdentifier` | string                                                       |
+| `Routing `      | `tss.MessageRouting `表示tss 的 from / to / broadcast也就是说，当前消息封装有三层： |
 
 ```text
-WrappedMessage
-   -> WireMessage
-      -> tss-lib raw wire bytes
+  WrappedMessage.Payload
+    -> json(WireMessage)
+
+  WireMessage.Message
+    -> json(BulkWireMsg)
+
+  BulkWireMsg.WiredBulkMsg
+    -> tss-lib 原始 wire bytes
 ```
+
+为什么不直接把 `tss-lib` 的 `raw wire bytes` 放进 `WireMessage.Message`，还要多包一层 `BulkWireMsg`？
+
+原因是当前实现想把“真正的 TSS 原始消息”和“当前项目自己额外需要的元信息”分开：
+
+- WireMessage 这一层负责网络传输壳
+    - 路由
+    - round 名称
+    - 外层签名
+
+- BulkWireMsg 这一层负责和 TSS 原始消息绑定的内部元信息
+    - 原始 tss-lib wire bytes
+    - MsgIdentifier
+    - 再带一份 routing
+
+- wireMsg 是“网络上传输的 TSS 封包”
+- bulkMsg 是“封包里面那段真正的 TSS **业务载荷**”
+- bulkMsg.WiredBulkMsg 才是“**最终交给 tss-lib 状态机消费的原始消息**”
 
 ### 4.2 当前使用的消息类型
 
