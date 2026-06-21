@@ -3,6 +3,7 @@ package common
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -157,4 +158,27 @@ func getHighestFreq(confirmedList map[string]string) (string, int, error) {
 		}
 	}
 	return data, maxFreq, nil
+}
+
+func (t *TssCommon) NotifyTaskDone() error {
+	msg := messages.TssTaskNotifier{TaskDone: true}
+	data, err := json.Marshal(msg)
+	if err != nil {
+		return fmt.Errorf("fail to marshal the request body %w", err)
+	}
+	wrappedMsg := messages.WrappedMessage{
+		MessageType: messages.TSSTaskDone,
+		MsgID:       t.msgID,
+		Payload:     data,
+	}
+
+	t.P2PPeersLock.RLock()
+	peers := t.P2PPeers
+	defer t.P2PPeersLock.RUnlock()
+
+	t.renderToP2P(&messages.BroadcastMsgChan{
+		WrappedMessage: wrappedMsg,
+		PeersID:        peers,
+	})
+	return nil
 }

@@ -5,6 +5,9 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"math/big"
+	"sort"
+	"strconv"
 
 	"github.com/bnb-chain/tss-lib/crypto"
 	"github.com/bnb-chain/tss-lib/tss"
@@ -88,4 +91,72 @@ func BytesToHashString(msg []byte) (string, error) {
 		return "", fmt.Errorf("fail to caculate sha256 hash: %w", err)
 	}
 	return hex.EncodeToString(h.Sum(nil)), nil
+}
+
+func GetParties(keys []string, localPartyKey string) ([]*tss.PartyID, *tss.PartyID, error) {
+	var localPartyID *tss.PartyID
+	var unSortedPartiesID []*tss.PartyID
+	sort.Strings(keys)
+	for idx, item := range keys {
+		pkBytes, err := hex.DecodeString(item)
+		if err != nil {
+			return nil, nil, fmt.Errorf("fail to get account pub key (%s): %w", item, err)
+		}
+		key := new(big.Int).SetBytes(pkBytes)
+		// Note: The `id` and `moniker` fields are for convenience to allow you to easily track participants.
+		// The `id` should be a unique string representing this party in the network and `moniker` can be anything (even left blank).
+		// The `uniqueKey` is a unique identifying key for this peer (such as its p2p public key) as a big.Int.
+		partyID := tss.NewPartyID(strconv.Itoa(idx), "", key)
+		if item == localPartyKey {
+			localPartyID = partyID
+		}
+		unSortedPartiesID = append(unSortedPartiesID, partyID)
+	}
+	if localPartyID == nil {
+		return nil, nil, errors.New("local party is not in the list")
+	}
+	partiesID := tss.SortPartyIDs(unSortedPartiesID)
+	return partiesID, localPartyID, nil
+}
+
+func SetupPartyIDMap(partiesID []*tss.PartyID) map[string]*tss.PartyID {
+	partyIDMap := make(map[string]*tss.PartyID)
+	for _, id := range partiesID {
+		partyIDMap[id.Id] = id
+	}
+	return partyIDMap
+}
+
+func GeneratePartyIDtoP2PIDMaps(parties map[string]*tss.PartyID) (map[string]peer.ID, error) {
+	partyIDtoP2PID := make(map[string]peer.ID)
+	for id, party := range parties {
+		peerID, err := GetPeerIDFromPartyID(party)
+		if err != nil {
+			return nil, err
+		}
+		partyIDtoP2PID[id] = peerID
+	}
+	return partyIDtoP2PID, nil
+}
+
+func GetPeerIDFromPartyID(partyID *tss.PartyID) (peer.ID, error) {
+	if partyID == nil || !partyID.ValidateBasic() {
+		return "", errors.New("invalid partyID")
+	}
+	pkBytes := partyID.KeyInt().Bytes()
+	return GetPeerIDFromSecp256PubKey(pkBytes)
+}
+
+func GetPeersID(partyIDtoP2PID map[string]peer.ID, localPeerID string) []peer.ID {
+	if partyIDtoP2PID == nil {
+		return nil
+	}
+	peerIDs := make([]peer.ID, 0, len(partyIDtoP2PID)-1)
+	for _, value := range partyIDtoP2PID {
+		if value.String() == localPeerID {
+			continue
+		}
+		peerIDs = append(peerIDs, value)
+	}
+	return peerIDs
 }
