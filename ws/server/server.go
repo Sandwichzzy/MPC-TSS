@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"net"
 	"net/http"
-	"os"
 
 	"github.com/tendermint/tendermint/libs/log"
 	"github.com/tendermint/tendermint/libs/service"
@@ -33,7 +32,11 @@ func NewWSServer(localAddr string) (*WebsocketManager, error) {
 	wsServer := &WSServer{}
 	var err error
 
-	logger := log.NewTMLogger(log.NewSyncWriter(os.Stdout))
+	logger := log.MustNewDefaultLogger(
+		log.LogFormatPlain, // 或 LogFormatJSON
+		"info",
+		false,
+	)
 	// 这里复用 Tendermint 提供的 JSON-RPC HTTP server 外壳：
 	// 它已经把 listener、serve、logger、基础 server 配置封装好了，
 	// 本项目只需要在这个壳子里挂上自己的 `/ws` 处理函数即可，不需要自己再重复实现一套 HTTP/WebSocket 服务框架。
