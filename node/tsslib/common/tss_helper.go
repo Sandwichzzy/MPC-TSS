@@ -1,11 +1,13 @@
 package common
 
 import (
+	"crypto/elliptic"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math/big"
 	"strings"
 
 	"github.com/Sandwichzzy/tss/node/tsslib/abnormal"
@@ -13,6 +15,7 @@ import (
 	"github.com/bnb-chain/tss-lib/ecdsa/keygen"
 	"github.com/bnb-chain/tss-lib/ecdsa/signing"
 	"github.com/bnb-chain/tss-lib/tss"
+	"github.com/btcsuite/btcd/btcec/v2"
 )
 
 func MsgToHashString(msg []byte) (string, error) {
@@ -181,4 +184,35 @@ func (t *TssCommon) NotifyTaskDone() error {
 		PeersID:        peers,
 	})
 	return nil
+}
+
+func Contains(s []*tss.PartyID, e *tss.PartyID) bool {
+	if e == nil {
+		return false
+	}
+	for _, a := range s {
+		if *a == *e {
+			return true
+		}
+	}
+	return false
+}
+
+func MsgToHashInt(digest []byte) *big.Int {
+	return hashToInt(digest, btcec.S256())
+}
+
+func hashToInt(hash []byte, c elliptic.Curve) *big.Int {
+	orderBits := c.Params().N.BitLen()
+	orderBytes := (orderBits + 7) / 8
+	if len(hash) > orderBytes {
+		hash = hash[:orderBytes]
+	}
+
+	ret := new(big.Int).SetBytes(hash)
+	excess := len(hash)*8 - orderBits
+	if excess > 0 {
+		ret.Rsh(ret, uint(excess))
+	}
+	return ret
 }

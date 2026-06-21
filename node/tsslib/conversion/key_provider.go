@@ -61,3 +61,15 @@ func GetPubKeyFromPeerID(pID string) (string, error) {
 	pubKeyStr := hex.EncodeToString(rawBytes)
 	return pubKeyStr, nil
 }
+
+func GetPubKeysFromPeerIDs(peers []string) ([]string, error) {
+	var result []string
+	for _, item := range peers {
+		pKey, err := GetPubKeyFromPeerID(item)
+		if err != nil {
+			return nil, fmt.Errorf("fail to get pubkey from peerID: %w", err)
+		}
+		result = append(result, pKey)
+	}
+	return result, nil
+}

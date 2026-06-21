@@ -268,6 +268,7 @@ func (t *TssServer) requestCheck(request interface{}) error {
 		if len(value.SignerPubKeys) == 0 {
 			return errors.New("empty signer pub keys")
 		}
+		//当前 Node 必须在 signer 集合中
 		isSignMember := false
 		for _, el := range value.SignerPubKeys {
 			if myPk == el {
@@ -295,6 +296,9 @@ func (t *TssServer) ExportPeerAddress() map[string]string {
 	return ret
 }
 
+// CheckPubKeys 做两件事：
+// 1. 校验 signer 数量至少达到 threshold
+// 2. 把 signer 公钥转成 `peer.ID`
 func (t *TssServer) CheckPubKeys(signerPubKeys []string, threshold int) ([]peer.ID, error) {
 	if len(signerPubKeys) < threshold {
 		t.logger.Error().Msg("the keys size is smaller than threshold, please commit right params!")
