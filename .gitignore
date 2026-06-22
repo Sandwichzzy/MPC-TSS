@@ -36,6 +36,6 @@ go.work.sum
 # ai
 .codex
 .claude
-
+AGENTS.md
 # Binaries for programs and plugins
 tss
