@@ -33,11 +33,13 @@ func (m *Manager) keygen(tssMembers []string, threshold int, electionId uint64, 
 	cpk, err := m.generateKey(tssMembers, threshold, electionId, requestId)
 	if err != nil {
 		log.Error("failed to generate key", "err", err)
-		return tss.KeygenResponse{}, nil
+		return tss.KeygenResponse{}, err
 	}
 	if err = m.store.Insert(types.CpkData{
 		Cpk:          cpk,
 		ElectionId:   electionId,
+		Threshold:    threshold,
+		TssMembers:   tssMembers,
 		CreationTime: time.Now(),
 	}); err != nil {
 		log.Error("failed to set cpk in storage", "err", err)

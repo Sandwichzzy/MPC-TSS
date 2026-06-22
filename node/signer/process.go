@@ -102,8 +102,8 @@ func (p *Processor) Stop() {
 }
 
 func (p *Processor) run() {
-	//go p.ProcessMessage()
-	//go p.Verify()
-	//go p.Sign()
-	//go p.Keygen()
+	go p.ProcessMessage()
+	go p.Verify()
+	go p.Sign()
+	go p.Keygen()
 }

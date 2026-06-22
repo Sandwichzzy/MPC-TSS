@@ -201,7 +201,7 @@ func NewTss(
 }
 
 func (t *TssServer) Start() error {
-	//TODO:这里只打印
+	//这里只打印, new的时候已经启动了
 	log.Info().Msg("Starting the TSS servers")
 	return nil
 }

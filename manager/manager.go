@@ -77,11 +77,7 @@ func NewManager(wsServer server.IWebsocketManager, store types.IManagerStore, co
 
 func (m *Manager) Start() {
 	log.Info("manager is starting......")
-	_, err := m.keygen(nil, 4, 12, "") //todo: 补充参数
-	if err != nil {
-		log.Error("keygen fail", "err", err)
-		return
-	}
+	log.Info("manager is ready, use /api/v1/keygen to create a cluster public key")
 }
 
 func (m *Manager) Stop() {
@@ -116,7 +112,29 @@ func (m *Manager) TransactionSign(request tss.TransactionSignRequest) ([]byte, e
 		return responseBytes, nil
 	}
 
-	ctx := types.NewContext().WithRequestId(request.RequestId).WithElectionId(request.ElectionId)
+	cpkData, err := m.store.GetByElectionId(request.ElectionId)
+	if err != nil {
+		return nil, err
+	}
+	if len(cpkData.Cpk) == 0 {
+		return nil, fmt.Errorf("cluster public key not found for election_id %d", request.ElectionId)
+	}
+
+	members := cpkData.TssMembers
+	if len(members) == 0 {
+		members = m.tssMembers
+	}
+	availableNodes := m.availableNodes(members)
+	ctx := types.NewContext().
+		WithRequestId(request.RequestId).
+		WithElectionId(request.ElectionId).
+		WithAvailableNodes(availableNodes).
+		WithTssInfo(&types.TssCommitteeInfo{
+			ElectionId:    request.ElectionId,
+			ClusterPubKey: cpkData.Cpk,
+			TssMembers:    members,
+			Threshold:     cpkData.Threshold,
+		})
 
 	// ask tss for nodes the agreement
 	ctx, err = m.agreement(ctx, request, tss.AskMessageHash)
@@ -162,6 +180,8 @@ func (m *Manager) Keygen(request tss.KeygenRequest) (string, error) {
 	if err = m.store.Insert(types.CpkData{
 		Cpk:          cpk,
 		ElectionId:   request.ElectionId,
+		Threshold:    request.Threshold,
+		TssMembers:   m.tssMembers,
 		CreationTime: time.Now(),
 	}); err != nil {
 		log.Error("failed to get cpk from storage", "err", err)

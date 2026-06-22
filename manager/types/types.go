@@ -8,6 +8,8 @@ import (
 type CpkData struct {
 	Cpk          string    `json:"cpk"`
 	ElectionId   uint64    `json:"election_id"`
+	Threshold    int       `json:"threshold"`
+	TssMembers   []string  `json:"tss_members"`
 	CreationTime time.Time `json:"creation_time"`
 }
 

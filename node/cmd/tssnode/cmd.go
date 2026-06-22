@@ -16,6 +16,7 @@ import (
 	"github.com/Sandwichzzy/tss/node/tsslib"
 	"github.com/Sandwichzzy/tss/node/tsslib/common"
 	"github.com/Sandwichzzy/tss/node/tsslib/conversion"
+	nodetypes "github.com/Sandwichzzy/tss/node/types"
 	"github.com/ethereum/go-ethereum/crypto"
 	ethcrypto "github.com/ethereum/go-ethereum/crypto"
 	"github.com/rs/zerolog"
@@ -60,9 +61,14 @@ func runNode(cmd *cobra.Command) error {
 		return err
 	}
 	// 本地 LevelDB 用于缓存节点状态、任务进度和协议中间结果。
-	store, err := store.NewStorage(cfg.Node.DBDir)
+	nodeStore, err := store.NewStorage(cfg.Node.DBDir)
 	if err != nil {
 		return err
+	}
+	if len(cfg.Manager.Nodes) > 0 {
+		if err := nodeStore.SetInactiveMembers(nodetypes.TssMembers{TssMembers: cfg.Manager.Nodes}); err != nil {
+			return err
+		}
 	}
 
 	// P2P 端口从字符串配置转换为整数，供 tsslib 建连使用。
@@ -90,7 +96,7 @@ func runNode(cmd *cobra.Command) error {
 		cfg.Node.Secrets.Enable,
 		cfg.Node.Secrets.SecretId,
 		cfg.Node.Shamir,
-		store,
+		nodeStore,
 	)
 
 	if err != nil {
@@ -112,7 +118,7 @@ func runNode(cmd *cobra.Command) error {
 	address := ethcrypto.PubkeyToAddress(privKey.PublicKey)
 
 	// signer 负责把外部请求转换成底层 tss 协议动作。
-	signer, err := sign.NewProcessor(cfg, tssInstance, privKey, localPubkeyBytes, pubkeyHex, store, address)
+	signer, err := sign.NewProcessor(cfg, tssInstance, privKey, localPubkeyBytes, pubkeyHex, nodeStore, address)
 	if err != nil {
 		log.Error().Err(err).Msg("fail to new signer ")
 		return err

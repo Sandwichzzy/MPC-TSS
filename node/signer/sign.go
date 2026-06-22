@@ -118,8 +118,8 @@ func (p *Processor) SignGo(resId tmtypes.JSONRPCStringID, sign tsscommon.NodeSig
 			return err
 		}
 		bol := p.CacheSign(hashStr, signData)
-		logger.Info().Msgf("cache sign byte behavior %s ", bol)
-		data = signByte
+		logger.Info().Msgf("cache sign byte behavior %t", bol)
+		data = signData
 	} else {
 		data = signByte
 	}

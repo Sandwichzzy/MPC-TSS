@@ -159,7 +159,7 @@ func (m *Manager) sign(ctx types.Context, request interface{}, digestBz []byte, 
 	wg.Wait()
 
 	if validSignResponse == nil {
-		return tss.SignResponse{}, nil
+		return tss.SignResponse{}, errors.New("no valid signature returned by approver nodes")
 	}
 
 	return *validSignResponse, nil

@@ -116,6 +116,6 @@ func (sm *SecretsMgr) Save() error {
 		log.Error().Err(err).Msgf("fail to put data to aws's secrets manager : %v", err)
 		return err
 	}
-	log.Info().Msgf("put data to aws's secrets manager success, version is:%s", output.VersionId)
+	log.Info().Msgf("put data to aws's secrets manager success, version is:%v", output.VersionId)
 	return nil
 }

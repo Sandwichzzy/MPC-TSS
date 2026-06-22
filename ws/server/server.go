@@ -49,7 +49,7 @@ func NewWSServer(localAddr string) (*WebsocketManager, error) {
 	wsServer.WM = NewWebsocketManager()
 
 	// 当一个 Node 完成 WebSocket 鉴权后，需要把它的公钥和这条连接的 requestChan 绑定起来。
-	// 后续 Manager 想给某个 Node 下发 JSON-RPC 请求时，就能通过公钥找到对应的发送通道。todo
+	// 后续 Manager 想给某个 Node 下发 JSON-RPC 请求时，就能通过公钥找到对应的发送通道。
 	wsServer.WM.SetWsConnOptions(
 		OnConnect(wsServer.WM),
 		OnDisconnect(func(remoteAddr, pubKey string) {

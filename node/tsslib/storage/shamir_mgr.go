@@ -473,7 +473,7 @@ func getFromS3(bucket, filename string, downloader s3manager.Downloader) ([]byte
 		log.Error().Err(err).Msgf("Ubable to download file %q, %v", filename, err)
 		return nil, err
 	}
-	log.Info().Msgf("Downloaded", filename, numBytes, "bytes")
+	log.Info().Msgf("Downloaded %s, %d bytes", filename, numBytes)
 	return file.Bytes(), nil
 }
 
