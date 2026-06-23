@@ -15,8 +15,7 @@ type Message struct {
 type AddrList []maddr.Multiaddr
 
 func (al *AddrList) Type() string {
-	//TODO implement me
-	panic("implement me")
+	return "multiaddr"
 }
 
 func (al *AddrList) String() string {

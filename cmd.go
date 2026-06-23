@@ -27,12 +27,11 @@ func main() {
 		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
 			cfgFile, _ := cmd.Flags().GetString("config")
 			loadedCfg, err := config.LoadConfig(cfgFile)
-			if err == nil {
-				// 成功加载后，把配置写回命令上下文，后续 manager/node 都从这里取。
-				return config.SetCmdConfig(cmd, loadedCfg)
-			} else {
-				return nil
+			if err != nil {
+				return err
 			}
+			// 成功加载后，把配置写回命令上下文，后续 manager/node 都从这里取。
+			return config.SetCmdConfig(cmd, loadedCfg)
 		},
 	}
 

@@ -129,7 +129,10 @@ func (m *Manager) sign(ctx types.Context, request interface{}, digestBz []byte, 
 					}
 					//验证签名
 					//1.得到 TSS Cluster 公钥
-					poolPubKeyBz, _ := hex.DecodeString(ctx.TssInfos().ClusterPubKey)
+					poolPubKeyBz, err := hex.DecodeString(ctx.TssInfos().ClusterPubKey)
+					if err != nil {
+						log.Error("failed to decode cluster public key", err)
+					}
 					if len(signResponse.Signature) < 64 {
 						log.Error(fmt.Sprintf("invalid signature, expected length is no less than 64, actual length is %d", len(signResponse.Signature)))
 						return

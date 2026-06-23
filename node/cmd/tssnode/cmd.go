@@ -131,10 +131,11 @@ func runNode(cmd *cobra.Command) error {
 		log.Error().Err(err).Msg("fail to create http server")
 		return err
 	}
-	if err := hs.Start(); err != nil {
-		log.Error().Err(err).Msg("fail to start http server")
-		return err
-	}
+	go func() {
+		if err := hs.Start(); err != nil {
+			log.Error().Err(err).Msg("fail to start http server")
+		}
+	}()
 
 	quit := make(chan os.Signal, 1)
 	// 和 manager 一样，节点通过信号触发有序退出。
