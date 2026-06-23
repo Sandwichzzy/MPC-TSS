@@ -79,6 +79,15 @@ func (tKeyGen *TssKeyGen) GetTssCommonStruct() *common2.TssCommon {
 	return tKeyGen.tssCommonStruct
 }
 
+func (tKeyGen *TssKeyGen) refreshP2PPeers() {
+	tKeyGen.tssCommonStruct.P2PPeersLock.Lock()
+	defer tKeyGen.tssCommonStruct.P2PPeersLock.Unlock()
+	tKeyGen.tssCommonStruct.P2PPeers = conversion.GetPeersID(
+		tKeyGen.tssCommonStruct.GetPartyIDtoP2PID(),
+		tKeyGen.tssCommonStruct.GetLocalPeerID(),
+	)
+}
+
 func (tKeyGen *TssKeyGen) GenerateNewKey(keygenReq Request) (*bcrypto.ECPoint, error) {
 	// 把参与方公钥列表转换成 tss-lib 使用的 PartyID 集合，并定位当前节点自己的 PartyID。
 	// conversion.GetParties 内部会先排序，因此所有节点看到的参与方顺序是一致的。
@@ -133,9 +142,7 @@ func (tKeyGen *TssKeyGen) GenerateNewKey(keygenReq Request) (*bcrypto.ECPoint, e
 	tKeyGen.tssCommonStruct.SetPartyInfo(partyInfo)
 	abnormalMgr.SetPartyInfo(keyGenParty, partyIDMap)
 	// P2PPeers 只保存“其他参与方”，后续广播时直接把消息扔给它们，不会把自己包含进去。
-	tKeyGen.tssCommonStruct.P2PPeersLock.Lock()
-	conversion.GetPeersID(tKeyGen.tssCommonStruct.GetPartyIDtoP2PID(), tKeyGen.tssCommonStruct.GetLocalPeerID())
-	tKeyGen.tssCommonStruct.P2PPeersLock.Unlock()
+	tKeyGen.refreshP2PPeers()
 
 	var keyGenWg sync.WaitGroup
 	keyGenWg.Add(2)
