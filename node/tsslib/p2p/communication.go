@@ -49,6 +49,8 @@ type Communication struct {
 	host              host.Host       // libp2p host (core networking object)
 	wg                *sync.WaitGroup
 	stopChan          chan struct{}
+	lifecycleLocker   *sync.Mutex
+	stopping          bool
 	subscribers       map[messages.TSSMessageTpe]*MessageIDSubscriber // subscriber map: topic(TSSMessageType) -> MsgID -> channel
 	subscriberLocker  *sync.Mutex
 	streamCount       int64
@@ -85,6 +87,7 @@ func NewCommunication(
 		listenAddr:        addr,
 		wg:                &sync.WaitGroup{},
 		stopChan:          make(chan struct{}),
+		lifecycleLocker:   &sync.Mutex{},
 		subscribers:       make(map[messages.TSSMessageTpe]*MessageIDSubscriber),
 		subscriberLocker:  &sync.Mutex{},
 		streamCount:       0,
@@ -119,8 +122,11 @@ func (c *Communication) Broadcast(peers []peer.ID, msg []byte, msgID string, nee
 	if len(peers) == 0 {
 		return
 	}
+	if !c.tryTrackBroadcast() {
+		c.logger.Debug().Msgf("skip broadcast for msgID %s because communication is stopping", msgID)
+		return
+	}
 	// try to discover all peers and then broadcast the messages
-	c.wg.Add(1)
 	go c.broadcastToPeers(peers, msg, msgID, needHandleResponse)
 }
 
@@ -192,17 +198,16 @@ func (c *Communication) writeToStream(pID peer.ID, msg []byte, msgID string, nee
 	if stream == nil {
 		return nil
 	}
-	// register stream for msgID (for later cleanup / tracking)
-	defer func() {
-		c.streamMgr.AddStream(msgID, stream)
-	}()
 	// send payload
 	if err = WriteStreamWithBuffer(msg, stream); err != nil {
+		_ = stream.Reset()
 		return fmt.Errorf("fail to write msg: %w", err)
 	}
+	c.streamMgr.AddStream(msgID, stream)
 	// optionally wait response
 	if needHandleResponse {
 		if err := c.HandleResponse(stream, pID); err != nil {
+			_ = stream.Reset()
 			// retry once (fail-safe)
 			return c.writeToStream(pID, msg, msgID, false)
 		}
@@ -486,10 +491,33 @@ func (c *Communication) Start(priKeyBytes []byte) error {
 
 // Stop gracefully shuts down P2P system
 func (c *Communication) Stop() error {
-	err := c.host.Close()
-	close(c.stopChan)
+	c.beginStop()
+	var err error
+	if c.host != nil {
+		err = c.host.Close()
+	}
 	c.wg.Wait()
 	return err
+}
+
+func (c *Communication) tryTrackBroadcast() bool {
+	c.lifecycleLocker.Lock()
+	defer c.lifecycleLocker.Unlock()
+	if c.stopping {
+		return false
+	}
+	c.wg.Add(1)
+	return true
+}
+
+func (c *Communication) beginStop() {
+	c.lifecycleLocker.Lock()
+	defer c.lifecycleLocker.Unlock()
+	if c.stopping {
+		return
+	}
+	c.stopping = true
+	close(c.stopChan)
 }
 
 func (c *Communication) SetSubscribe(topic messages.TSSMessageTpe, msgID string, channel chan *Message) {
@@ -618,5 +646,4 @@ func (c *Communication) ExportPeerAddress() map[peer.ID]AddrList {
 }
 
 //todo:. getSubscriber 加锁 + retry loop 有竞态风险
-//todo: writeToStream defer bug:这个逻辑是“发送成功才 register”，但 defer 永远执行（即使失败）
 //todo: Broadcast channel 可能阻塞 case msg := <-c.BroadcastMsgChan: buffer 满时会卡死 producer

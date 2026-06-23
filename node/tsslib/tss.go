@@ -30,17 +30,17 @@ import (
 const poolPublicKey = 66
 
 type TssServer struct {
-	conf             common2.TssConfig
-	logger           zerolog.Logger
-	p2pCommunication *p2p2.Communication
-	localNodePubKey  string
-	participants     map[string][]string
-	preParams        *bkeygen.LocalPreParams
-	tssKeyGenLocker  *sync.Mutex
-	stopChan         chan struct{}
-	stateManager     storage2.LocalStateManager
-	//secretsManager      storage2.SecretsManager
-	//shamirManager       storage2.ShamirManager
+	conf                common2.TssConfig
+	logger              zerolog.Logger
+	p2pCommunication    *p2p2.Communication
+	localNodePubKey     string
+	participants        map[string][]string
+	preParams           *bkeygen.LocalPreParams
+	tssKeyGenLocker     *sync.Mutex
+	stopChan            chan struct{}
+	stateManager        storage2.LocalStateManager
+	secretsManager      storage2.SecretsManager
+	shamirManager       storage2.ShamirManager
 	privateKey          *ecdsa.PrivateKey
 	tssMetrics          *monitor.Metric
 	secretsEnable       bool
@@ -90,21 +90,21 @@ func NewTss(
 	if err != nil {
 		return nil, errors.New("fail to create file state manager")
 	}
-	//var secretsManager *storage2.SecretsMgr
-	//var shamirManager *storage2.ShamirMgr
-	//if shamirConfig.Enable {
-	//	shamirManager, err = storage2.NewShamirMgr(shamirConfig)
-	//	if err != nil {
-	//		log.Error().Err(err).Msgf("fail to create shamir manager :%v", err)
-	//		return nil, errors.New("fail to create shamir manager")
-	//	}
-	//} else if secretsEnable {
-	//	secretsManager, err = storage2.NewSecretsMgr(secretId)
-	//	if err != nil {
-	//		log.Error().Err(err).Msgf("fail to create secrets manager :%v", err)
-	//		return nil, errors.New("fail to create secrets manager")
-	//	}
-	//}
+	var secretsManager *storage2.SecretsMgr
+	var shamirManager *storage2.ShamirMgr
+	if shamirConfig.Enable {
+		shamirManager, err = storage2.NewShamirMgr(shamirConfig)
+		if err != nil {
+			log.Error().Err(err).Msgf("fail to create shamir manager :%v", err)
+			return nil, errors.New("fail to create shamir manager")
+		}
+	} else if secretsEnable {
+		secretsManager, err = storage2.NewSecretsMgr(secretId)
+		if err != nil {
+			log.Error().Err(err).Msgf("fail to create secrets manager :%v", err)
+			return nil, errors.New("fail to create secrets manager")
+		}
+	}
 	cmdBootstrapPeerS := strings.Split(cmdBootstrapPeers, ",")
 	var bootstrapPeers p2p2.AddrList
 	savedPeers, err := stateManager.RetrieveP2PAddresses()
@@ -135,24 +135,24 @@ func NewTss(
 		if err != nil {
 			return nil, fmt.Errorf("fail to generate pre parameters: %w", err)
 		}
-		//} else if shamirConfig.Enable {
-		//	preParams = shamirManager.GetOneLocalState()
-		//	if preParams == nil {
-		//		log.Info().Msg("start to generate pre params...")
-		//		preParams, err = bkeygen.GeneratePreParams(conf.PreParamTimeout)
-		//		if err != nil {
-		//			return nil, fmt.Errorf("fail to generate pre parameters: %w", err)
-		//		}
-		//	}
-		//} else if secretsEnable {
-		//	preParams = secretsManager.GetOneLocalState()
-		//	if preParams == nil {
-		//		log.Info().Msg("start to generate pre params...")
-		//		preParams, err = bkeygen.GeneratePreParams(conf.PreParamTimeout)
-		//		if err != nil {
-		//			return nil, fmt.Errorf("fail to generate pre parameters: %w", err)
-		//		}
-		//	}
+	} else if shamirConfig.Enable {
+		preParams = shamirManager.GetOneLocalState()
+		if preParams == nil {
+			log.Info().Msg("start to generate pre params...")
+			preParams, err = bkeygen.GeneratePreParams(conf.PreParamTimeout)
+			if err != nil {
+				return nil, fmt.Errorf("fail to generate pre parameters: %w", err)
+			}
+		}
+	} else if secretsEnable {
+		preParams = secretsManager.GetOneLocalState()
+		if preParams == nil {
+			log.Info().Msg("start to generate pre params...")
+			preParams, err = bkeygen.GeneratePreParams(conf.PreParamTimeout)
+			if err != nil {
+				return nil, fmt.Errorf("fail to generate pre parameters: %w", err)
+			}
+		}
 	} else {
 		preParams, err = stateManager.GetOneLocalPreParams()
 		if err != nil && os.IsNotExist(err) {
@@ -180,17 +180,17 @@ func NewTss(
 	}
 
 	tssServer := TssServer{
-		conf:             conf,
-		logger:           log.With().Str("module", "tss").Logger(),
-		p2pCommunication: comm,
-		localNodePubKey:  pubkeyHex,
-		participants:     make(map[string][]string),
-		preParams:        preParams,
-		tssKeyGenLocker:  &sync.Mutex{},
-		stopChan:         make(chan struct{}),
-		stateManager:     stateManager,
-		//secretsManager:      secretsManager,
-		//shamirManager:       shamirManager,
+		conf:                conf,
+		logger:              log.With().Str("module", "tss").Logger(),
+		p2pCommunication:    comm,
+		localNodePubKey:     pubkeyHex,
+		participants:        make(map[string][]string),
+		preParams:           preParams,
+		tssKeyGenLocker:     &sync.Mutex{},
+		stopChan:            make(chan struct{}),
+		stateManager:        stateManager,
+		secretsManager:      secretsManager,
+		shamirManager:       shamirManager,
 		privateKey:          priKey,
 		tssMetrics:          metrics,
 		secretsEnable:       secretsEnable,

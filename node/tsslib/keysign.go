@@ -30,22 +30,22 @@ func (t *TssServer) KeySign(req keysign2.Request) (keysign2.Response, error) {
 		return emptyResp, err
 	}
 	var localStateItem storage.KeygenLocalState
-	//if t.shamirEnable {
-	//	localStateItem, err = t.shamirManager.GetKeyFile(req.PoolPubKey, t.localNodePubKey)
-	//	if err != nil {
-	//		return emptyResp, fmt.Errorf("fail to get local keygen state from shamir manager: %w", err)
-	//	}
-	//} else if t.secretsEnable {
-	//	localStateItem, err = t.secretsManager.GetKeyFile(req.PoolPubKey)
-	//	if err != nil {
-	//		return emptyResp, fmt.Errorf("fail to get local keygen state from secrets manager: %w", err)
-	//	}
-	//} else {
-	localStateItem, err = t.stateManager.GetLocalState(req.PoolPubKey)
-	if err != nil {
-		return emptyResp, fmt.Errorf("fail to get local keygen state from local drive: %w", err)
+	if t.shamirEnable {
+		localStateItem, err = t.shamirManager.GetKeyFile(req.PoolPubKey, t.localNodePubKey)
+		if err != nil {
+			return emptyResp, fmt.Errorf("fail to get local keygen state from shamir manager: %w", err)
+		}
+	} else if t.secretsEnable {
+		localStateItem, err = t.secretsManager.GetKeyFile(req.PoolPubKey)
+		if err != nil {
+			return emptyResp, fmt.Errorf("fail to get local keygen state from secrets manager: %w", err)
+		}
+	} else {
+		localStateItem, err = t.stateManager.GetLocalState(req.PoolPubKey)
+		if err != nil {
+			return emptyResp, fmt.Errorf("fail to get local keygen state from local drive: %w", err)
+		}
 	}
-	//}
 
 	_, ok := t.participants[req.PoolPubKey]
 	if !ok {

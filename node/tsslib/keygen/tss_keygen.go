@@ -30,12 +30,12 @@ type TssKeyGen struct {
 	stopChan        chan struct{}
 	localParty      *tss.PartyID
 	stateManager    storage2.LocalStateManager
-	//secretsEnable   bool
-	//secretsManager  storage2.SecretsManager
-	//shamirEnable    bool
-	//shamirManager   storage2.ShamirManager
-	commStopChan chan struct{}
-	p2pComm      *p2p.Communication
+	secretsEnable   bool
+	secretsManager  storage2.SecretsManager
+	shamirEnable    bool
+	shamirManager   storage2.ShamirManager
+	commStopChan    chan struct{}
+	p2pComm         *p2p.Communication
 }
 
 func NewTssKeyGen(localP2PID string,
@@ -46,10 +46,10 @@ func NewTssKeyGen(localP2PID string,
 	preParam *keygen.LocalPreParams,
 	msgID string,
 	stateManager storage2.LocalStateManager,
-	//secretsEnable bool,
-	//secretsManager storage2.SecretsManager,
-	//shamirEnable bool,
-	//shamirManager storage2.ShamirManager,
+	secretsEnable bool,
+	secretsManager storage2.SecretsManager,
+	shamirEnable bool,
+	shamirManager storage2.ShamirManager,
 	privateKey *ecdsa.PrivateKey,
 	p2pComm *p2p.Communication,
 	thresHold int) *TssKeyGen {
@@ -62,12 +62,12 @@ func NewTssKeyGen(localP2PID string,
 		stopChan:        stopChan,
 		localParty:      nil,
 		stateManager:    stateManager,
-		//secretsEnable:   secretsEnable,
-		//secretsManager:  secretsManager,
-		//shamirEnable:    shamirEnable,
-		//shamirManager:   shamirManager,
-		commStopChan: make(chan struct{}),
-		p2pComm:      p2pComm,
+		secretsEnable:   secretsEnable,
+		secretsManager:  secretsManager,
+		shamirEnable:    shamirEnable,
+		shamirManager:   shamirManager,
+		commStopChan:    make(chan struct{}),
+		p2pComm:         p2pComm,
 	}
 }
 
@@ -246,22 +246,23 @@ func (tKeyGen *TssKeyGen) processKeyGen(
 			// 1. Shamir 分片存储
 			// 2. SecretsManager 外部秘密管理
 			// 3. 本地磁盘状态文件
-			//if tKeyGen.shamirEnable {
-			//	if err := tKeyGen.shamirManager.PutKeyFile(keyGenLocalStateItem); err != nil {
-			//		return nil, fmt.Errorf("fail to put keygen result with shamir manager : %w", err)
-			//	}
-			//} else if tKeyGen.secretsEnable {
-			//	if err := tKeyGen.secretsManager.PutKeyFile(keyGenLocalStateItem); err != nil {
-			//		return nil, fmt.Errorf("fail to put keygen result to secrets manager map : %w", err)
-			//	}
-			//
-			//	if err := tKeyGen.secretsManager.Save(); err != nil {
-			//		return nil, fmt.Errorf("fail to put keygen result to secrets manager :%w", err)
-			//	}
-			//
-			//} else {
-			if err := tKeyGen.stateManager.SaveLocalState(keyGenLocalStateItem); err != nil {
-				return nil, fmt.Errorf("fail to save keygen result to storage: %w", err)
+			if tKeyGen.shamirEnable {
+				if err := tKeyGen.shamirManager.PutKeyFile(keyGenLocalStateItem); err != nil {
+					return nil, fmt.Errorf("fail to put keygen result with shamir manager : %w", err)
+				}
+			} else if tKeyGen.secretsEnable {
+				if err := tKeyGen.secretsManager.PutKeyFile(keyGenLocalStateItem); err != nil {
+					return nil, fmt.Errorf("fail to put keygen result to secrets manager map : %w", err)
+				}
+
+				if err := tKeyGen.secretsManager.Save(); err != nil {
+					return nil, fmt.Errorf("fail to put keygen result to secrets manager :%w", err)
+				}
+
+			} else {
+				if err := tKeyGen.stateManager.SaveLocalState(keyGenLocalStateItem); err != nil {
+					return nil, fmt.Errorf("fail to save keygen result to storage: %w", err)
+				}
 			}
 			// 地址簿不是密钥材料的一部分，但保存它可以帮助节点下次启动时更快恢复 P2P 邻居信息。
 			address := tKeyGen.p2pComm.ExportPeerAddress()
