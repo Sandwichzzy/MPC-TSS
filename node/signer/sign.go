@@ -28,12 +28,11 @@ import (
 // 8.  p.storeMessageHash(）
 
 func (p *Processor) Sign() {
-	defer p.wg.Done()
 	logger := p.logger.With().Str("step", "sign Message").Logger()
 
 	logger.Info().Msg("start to sign message ")
 
-	go func() {
+	p.launchTracked(func() {
 		defer func() {
 			logger.Info().Msg("exit sign process")
 		}()
@@ -78,15 +77,15 @@ func (p *Processor) Sign() {
 				}
 				nodeSignRequest.RequestBody = requestBody
 
-				go func() {
+				p.launchTracked(func() {
 					err := p.SignGo(req.ID.(tmtypes.JSONRPCStringID), nodeSignRequest, logger)
 					if err != nil {
 						return
 					}
-				}()
+				})
 			}
 		}
-	}()
+	})
 }
 
 func (p *Processor) SignGo(resId tmtypes.JSONRPCStringID, sign tsscommon.NodeSignRequest, logger zerolog.Logger) error {

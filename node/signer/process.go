@@ -86,7 +86,6 @@ func NewProcessor(cfg config.Configuration, tssInstance tsslib.Server, privKey *
 
 func (p *Processor) Start() {
 	p.logger.Info().Msg("Signer is starting")
-	p.wg.Add(4)
 	p.run()
 }
 
@@ -96,14 +95,22 @@ func (p *Processor) Stop() {
 	close(p.stopChan)
 	err := p.wsClient.Cli.Stop()
 	if err != nil {
-		return
+		p.logger.Error().Err(err).Msg("failed to stop websocket client")
 	}
 	p.wg.Wait()
 }
 
 func (p *Processor) run() {
-	go p.ProcessMessage()
-	go p.Verify()
-	go p.Sign()
-	go p.Keygen()
+	p.ProcessMessage()
+	p.Verify()
+	p.Sign()
+	p.Keygen()
+}
+
+func (p *Processor) launchTracked(fn func()) {
+	p.wg.Add(1)
+	go func() {
+		defer p.wg.Done()
+		fn()
+	}()
 }

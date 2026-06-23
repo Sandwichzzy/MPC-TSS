@@ -17,11 +17,10 @@ import (
 // 5. 通过 WebSocket 回给 Manager
 
 func (p *Processor) Keygen() {
-	defer p.wg.Done()
 	logger := p.logger.With().Str("step", "keygen").Logger()
 	logger.Info().Msg("start to keygen ")
 
-	go func() {
+	p.launchTracked(func() {
 		defer func() {
 			logger.Info().Msg("exit keygen process")
 		}()
@@ -71,5 +70,5 @@ func (p *Processor) Keygen() {
 
 			}
 		}
-	}()
+	})
 }

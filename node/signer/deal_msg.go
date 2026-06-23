@@ -9,7 +9,6 @@ import (
 
 func (p *Processor) ProcessMessage() {
 	logger := p.logger.With().Str("step", "process websocket message").Logger()
-	defer p.wg.Done()
 
 	reqChan := make(chan tmtypes.RPCRequest)
 	stopChan := make(chan struct{})
@@ -19,11 +18,16 @@ func (p *Processor) ProcessMessage() {
 		return
 	}
 
-	go func() {
+	p.launchTracked(func() {
 		defer close(stopChan)
 		for {
 			select {
-			case rpcReq := <-reqChan:
+			case <-p.stopChan:
+				return
+			case rpcReq, ok := <-reqChan:
+				if !ok {
+					return
+				}
 				reqId := rpcReq.ID.(tmtypes.JSONRPCStringID).String()
 				logger.Info().Str("reqId", reqId).Msgf("receive request method : %s", rpcReq.Method)
 				if rpcReq.Method == common.AskMessageHash.String() {
@@ -43,7 +47,7 @@ func (p *Processor) ProcessMessage() {
 				}
 			}
 		}
-	}()
+	})
 }
 
 func (p *Processor) writeChan(cache chan tmtypes.RPCRequest, msg tmtypes.RPCRequest) error {

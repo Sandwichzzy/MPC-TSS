@@ -18,11 +18,10 @@ import (
 // 3. 把通过校验的消息哈希记入 `waitSignMsgs`
 // 4. 回一个 `AskResponse{Result: true}`
 func (p *Processor) Verify() {
-	defer p.wg.Done()
 	logger := p.logger.With().Str("step", "verify event").Logger()
 	logger.Info().Msg("start to verify events ")
 
-	go func() {
+	p.launchTracked(func() {
 		defer func() {
 			logger.Info().Msg("exit verify event process")
 		}()
@@ -61,7 +60,7 @@ func (p *Processor) Verify() {
 				}
 			}
 		}
-	}()
+	})
 }
 
 func validateAskRequest(askRequest common.TransactionSignRequest) (string, error) {
