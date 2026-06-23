@@ -32,12 +32,12 @@ func (registry *Registry) KeygenHandler() gin.HandlerFunc {
 		}
 		cpk, err := registry.signService.Keygen(request)
 		if err != nil {
-			c.String(http.StatusInternalServerError, "failed to sign state")
-			log.Error("failed to sign state", "error", err)
+			c.String(http.StatusInternalServerError, "failed to generate cluster public key")
+			log.Error("failed to generate cluster public key", "error", err)
 			return
 		}
 		if _, err = c.Writer.Write([]byte(cpk)); err != nil {
-			log.Error("failed to write signature to response writer", "error", err)
+			log.Error("failed to write keygen response to response writer", "error", err)
 		}
 	}
 }
@@ -50,13 +50,13 @@ func (registry *Registry) SignTxHandler() gin.HandlerFunc {
 			return
 		}
 		if req.MessageHash == "" {
-			c.JSON(http.StatusBadRequest, errors.New("StartBlock and OffsetStartsAtIndex must not be nil or negative"))
+			c.JSON(http.StatusBadRequest, errors.New("message_hash must not be empty"))
 			return
 		}
 		signature, err := registry.signService.TransactionSign(req)
 		if err != nil {
-			c.String(http.StatusInternalServerError, "failed to sign state")
-			log.Error("failed to sign state", "error", err)
+			c.String(http.StatusInternalServerError, "failed to sign transaction")
+			log.Error("failed to sign transaction", "error", err)
 			return
 		}
 		if _, err := c.Writer.Write([]byte(signature)); err != nil {

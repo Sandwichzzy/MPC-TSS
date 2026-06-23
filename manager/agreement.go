@@ -47,8 +47,8 @@ func (m *Manager) agreement(ctx types.Context, request interface{}, method tss.M
 
 	wg := &sync.WaitGroup{}
 	wg.Add(1)
-	errSendChan := make(chan struct{})
 	expectedResponseCount := len(ctx.AvailableNodes())
+	errSendChan := make(chan struct{}, expectedResponseCount)
 	results := make(map[string]bool) // node -> true/false
 
 	go func() {
@@ -56,7 +56,7 @@ func (m *Manager) agreement(ctx types.Context, request interface{}, method tss.M
 		defer func() {
 			log.Info("exit accept agreement response goroutine")
 			cancel()
-			close(errSendChan)
+			close(stopChan)
 			wg.Done()
 		}()
 		var errSend int
@@ -146,7 +146,10 @@ func (m *Manager) askNodes(ctx types.Context, request []byte, method tss.Method,
 				}
 				if err := m.wsServer.SendMsg(requestMsg); err != nil {
 					log.Error("fail to send ask request", "requestId", "ASK_"+ctx.RequestId(), "node", node, "err", err)
-					errSendChan <- struct{}{}
+					select {
+					case errSendChan <- struct{}{}:
+					default:
+					}
 				}
 			}
 		}()

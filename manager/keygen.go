@@ -63,7 +63,7 @@ func (m *Manager) generateKey(tssMembers []string, threshold int, electionId uin
 		return "", err
 	}
 
-	sendError := make(chan struct{})
+	sendError := make(chan struct{}, 1)
 	clusterPublicKeys := make(map[string]string, 0)
 	var anyError error
 	wg := &sync.WaitGroup{}
@@ -108,7 +108,7 @@ func (m *Manager) generateKey(tssMembers []string, threshold int, electionId uin
 			}
 		}
 	}()
-	m.callKeygen(availableNodes, threshold, electionId, requestId, sendError)
+	m.callKeygen(availableNodes, tssMembers, threshold, electionId, requestId, sendError)
 	wg.Wait()
 
 	if anyError != nil {
@@ -130,12 +130,13 @@ func (m *Manager) generateKey(tssMembers []string, threshold int, electionId uin
 	return base, nil
 }
 
-func (m *Manager) callKeygen(availableNodes []string, threshold int, electionId uint64, requestId string, sendError chan struct{}) {
+func (m *Manager) callKeygen(availableNodes []string, tssMembers []string, threshold int, electionId uint64, requestId string, sendError chan struct{}) {
 	for _, node := range availableNodes {
 		nodeReq := tss.KeygenRequest{
-			Nodes:      m.tssMembers,
+			Nodes:      tssMembers,
 			Threshold:  threshold,
 			ElectionId: electionId,
+			RequestId:  requestId,
 			Timestamp:  time.Now().UnixMilli(),
 		}
 		requestBz, _ := json.Marshal(nodeReq)
@@ -145,7 +146,10 @@ func (m *Manager) callKeygen(availableNodes []string, threshold int, electionId 
 				RpcRequest: tmtypes.NewRPCRequest(tmtypes.JSONRPCStringID(requestId), "keygen", requestBz),
 			}
 			if err := m.wsServer.SendMsg(requestMsg); err != nil {
-				sendError <- struct{}{}
+				select {
+				case sendError <- struct{}{}:
+				default:
+				}
 			}
 		}(node, requestBz)
 	}

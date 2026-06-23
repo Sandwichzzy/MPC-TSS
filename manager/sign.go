@@ -70,7 +70,7 @@ func (m *Manager) sign(ctx types.Context, request interface{}, digestBz []byte, 
 	}
 	log.Info("Registered ResChannel with requestID", "requestID", ctx.RequestId())
 
-	errSendChan := make(chan struct{})
+	errSendChan := make(chan struct{}, 1)
 	responseNodes := make(map[string]struct{})
 	counter := &Counter{}
 
@@ -180,7 +180,10 @@ func (m *Manager) sendSignReqToNodes(ctx types.Context, request interface{}, met
 	requestBz, err := json.Marshal(nodeRequest)
 	if err != nil {
 		log.Error("failed to marshal node request", "err", err)
-		errSendChan <- struct{}{}
+		select {
+		case errSendChan <- struct{}{}:
+		default:
+		}
 		return
 	}
 
@@ -193,7 +196,10 @@ func (m *Manager) sendSignReqToNodes(ctx types.Context, request interface{}, met
 					TargetNode: node,
 				}); err != nil {
 				log.Error("failed to send sign request to nodes", err)
-				errSendChan <- struct{}{}
+				select {
+				case errSendChan <- struct{}{}:
+				default:
+				}
 				return
 			}
 		}(node, rpcRequest)
