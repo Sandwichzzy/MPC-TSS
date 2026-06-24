@@ -31,7 +31,10 @@ import (
 var TSSProtocolID protocol.ID = "/p2p/tss"
 
 const (
-	TimeoutConnecting = time.Second * 20 // TimeoutConnecting maximum time for wait for peers to connect
+	TimeoutConnecting         = time.Second * 20 // TimeoutConnecting maximum time for wait for peers to connect
+	subscriberLookupRetryMax  = 3
+	subscriberLookupRetryWait = 500 * time.Millisecond
+	subscriberDeliveryTimeout = 2 * time.Second
 )
 
 // Communication is the core TSS P2P communication layer
@@ -229,13 +232,13 @@ func (c *Communication) readFromStream(stream network.Stream) {
 		return
 	default:
 		dataBuf, err := ReadStreamWithBuffer(stream)
-		// send ACK back asynchronously
-		go WriteStreamWithBuffer([]byte("ack"), stream)
-
 		if err != nil {
 			c.logger.Error().Err(err).Msgf("fail to read from stream,peerID: %s", peerID)
 			c.streamMgr.AddStream("UNKNOWN", stream)
 			return
+		}
+		if err := WriteStreamWithBuffer([]byte("ack"), stream); err != nil {
+			c.logger.Error().Err(err).Msgf("fail to write ack to stream,peerID: %s", peerID)
 		}
 
 		// unwrap TSS message
@@ -249,22 +252,28 @@ func (c *Communication) readFromStream(stream network.Stream) {
 		// register stream by MsgID
 		c.streamMgr.AddStream(wrappedMsg.MsgID, stream)
 
-		// retry subscription lookup (race-safe)
-		for i := 1; i < 4; i++ {
-			channel := c.getSubscriber(wrappedMsg.MessageType, wrappedMsg.MsgID)
-			if channel != nil {
+		inboundMsg := &Message{
+			PeerID:  stream.Conn().RemotePeer(),
+			Payload: dataBuf,
+		}
+		for i := 1; i <= subscriberLookupRetryMax; i++ {
+			result := c.deliverToSubscriber(wrappedMsg.MessageType, wrappedMsg.MsgID, inboundMsg)
+			switch result {
+			case SubscriberDelivered:
 				c.logger.Debug().Msgf("from peer (%s) ,MsgId (%s), MsgType (%s)", peerID, wrappedMsg.MsgID, wrappedMsg.MessageType)
-				channel <- &Message{
-					PeerID:  stream.Conn().RemotePeer(),
-					Payload: dataBuf,
-				}
-				break
-			} else {
+				return
+			case SubscriberNotFound:
 				c.logger.Debug().Msgf("no MsgID %s found for this message,need to retry %d time", wrappedMsg.MsgID, i)
 				c.logger.Debug().Msgf("no MessageType %s found for this message,need to retry %d time", wrappedMsg.MessageType, i)
-				time.Sleep(500 * time.Millisecond)
+				if i < subscriberLookupRetryMax {
+					time.Sleep(subscriberLookupRetryWait)
+				}
+			case SubscriberBusy:
+				c.logger.Warn().Msgf("subscriber busy for msgID %s, message type %s; inbound delivery timed out after %s", wrappedMsg.MsgID, wrappedMsg.MessageType, subscriberDeliveryTimeout)
+				return
 			}
 		}
+		c.logger.Warn().Msgf("drop inbound message after %d subscriber lookup retries, msgID %s, message type %s", subscriberLookupRetryMax, wrappedMsg.MsgID, wrappedMsg.MessageType)
 	}
 }
 
@@ -532,15 +541,15 @@ func (c *Communication) SetSubscribe(topic messages.TSSMessageTpe, msgID string,
 	messageIDSubscribers.Subscribe(msgID, channel)
 }
 
-func (c *Communication) getSubscriber(topic messages.TSSMessageTpe, msgID string) chan *Message {
+func (c *Communication) deliverToSubscriber(topic messages.TSSMessageTpe, msgID string, message *Message) SubscriberDeliveryResult {
 	c.subscriberLocker.Lock()
-	defer c.subscriberLocker.Unlock()
 	messageIDSubscribers, ok := c.subscribers[topic]
+	c.subscriberLocker.Unlock()
 	if !ok {
 		c.logger.Debug().Msgf("msgId %s fail to find subscribers for %s", msgID, topic)
-		return nil
+		return SubscriberNotFound
 	}
-	return messageIDSubscribers.GetSubscriber(msgID)
+	return messageIDSubscribers.Deliver(msgID, message, subscriberDeliveryTimeout)
 }
 
 func (c *Communication) CancelSubscribe(topic messages.TSSMessageTpe, msgID string) {
@@ -644,6 +653,3 @@ func (c *Communication) ExportPeerAddress() map[peer.ID]AddrList {
 	}
 	return addressBook
 }
-
-//todo:. getSubscriber 加锁 + retry loop 有竞态风险
-//todo: Broadcast channel 可能阻塞 case msg := <-c.BroadcastMsgChan: buffer 满时会卡死 producer
