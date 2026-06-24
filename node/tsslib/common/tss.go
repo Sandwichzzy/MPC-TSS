@@ -214,7 +214,7 @@ func (t *TssCommon) ProcessOutCh(msg tss.Message, msgType messages.TSSMessageTpe
 	var sendErr error
 	//按广播/单播缓存到
 	if r.IsBroadcast {
-		//todo :这里用Moniker 还是 id
+		//这里用Moniker，当前 keysign 已经明确把 Moniker 当成“请求级消息标识”来用，localPartyID.Moniker = m.String()，，其中 m 是待签消息摘要转成的 big.Int
 		cachedWiredMsg := NewBulkWireMsg(msgData, msg.GetFrom().Moniker, r)
 		// 广播消息按消息类型缓存，等待后续统一签名发送。
 		_, ok := t.cachedWireBroadcastMsgLists.Load(msg.Type())
@@ -222,7 +222,6 @@ func (t *TssCommon) ProcessOutCh(msg tss.Message, msgType messages.TSSMessageTpe
 			t.cachedWireBroadcastMsgLists.Store(msg.Type(), cachedWiredMsg)
 		}
 	} else {
-		//todo :这里用Moniker 还是 id
 		cachedWiredMsg := NewBulkWireMsg(msgData, msg.GetFrom().Moniker, r)
 		_, ok := t.cachedWireUnicastMsgLists.Load(msg.Type() + ":" + r.To[0].String())
 		if !ok {

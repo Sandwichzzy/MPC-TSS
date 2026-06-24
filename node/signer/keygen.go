@@ -59,7 +59,6 @@ func (p *Processor) Keygen() {
 							logger.Error().Err(err).Msg("failed to send msg to manager")
 						}
 						logger.Info().Msgf("keygen success cpk=(%s)", resp.PubKey)
-						// todo: 将 key 存储到 levelDB
 					} else {
 						RpcResponse := tmtypes.NewRPCErrorResponse(req.ID, 202, "failed", resp.FailReason)
 						if err := p.wsClient.SendMsg(RpcResponse); err != nil {

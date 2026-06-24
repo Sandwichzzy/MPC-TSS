@@ -165,7 +165,7 @@ func (p *Processor) checkMessages(sign tsscommon.TransactionSignRequest, cluster
 	defer p.waitSignLock.RUnlock()
 	_, ok = p.waitSignMsgs[waitSignKey]
 	if !ok {
-		return errors.New("sign request has the unverified state batch"), nil, "", "", nil
+		return errors.New("sign request has not passed ask verification"), nil, "", "", nil
 	}
 
 	return nil, hashByte, waitSignKey, cacheKey, nil
@@ -210,7 +210,6 @@ func (p *Processor) sign(digestBz []byte, signerPubKeys []string, poolPubKey str
 	logger.Info().Str("message", hex.EncodeToString(digestBz)).Msg("got message to be signed")
 	keysignReq := keysign.NewRequest(poolPubKey, digestBz, signerPubKeys)
 
-	// todo: 提取私钥签名
 	keysignRes, err := p.tssServer.KeySign(keysignReq)
 	if err != nil {
 		logger.Err(err).Msg("fail to generate signature ")
@@ -263,13 +262,13 @@ func (p *Processor) storeMessageHash(electionId uint64, messageHash string, work
 			absentNodes = append(absentNodes, n)
 		}
 	}
-	sbi := message.MessageHashInfo{
+	info := message.SignedDigestInfo{
 		MessageHash:  messageHash,
 		ElectionId:   electionId,
 		AbsentNodes:  absentNodes,
 		WorkingNodes: workingNodes,
 	}
-	if err = p.nodeStore.SetMessageHash(sbi); err != nil {
+	if err = p.nodeStore.SetSignedDigest(info); err != nil {
 		return err
 	}
 	return nil

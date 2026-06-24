@@ -151,7 +151,7 @@ HTTP /api/v1/keygen ---> |  agreement/sign/keygen     |
 | `AskResponse` | ask 阶段的响应，只有一个 `Result bool` |
 | `NodeSignRequest` | 发给节点的正式签名请求，包含 `cluster_public_key`、参与节点列表、原始请求体 |
 | `SignResponse` | 节点返回的签名结果 |
-| `KeygenRequest` | keygen 请求，包含节点列表和阈值 |
+| `KeygenRequest` | keygen 请求，包含 `nodes`、`election_id`、`request_id`、`threshold` |
 | `KeygenResponse` | 节点返回的聚合公钥 |
 
 ### 4.4 request ID 的使用方式
@@ -610,8 +610,8 @@ Node 的 WebSocket 消费入口在 `node/signer/deal_msg.go` 的 `ProcessMessage
 它主要做这些事情：
 
 1. 解析 `TransactionSignRequest`
-2. 校验 `message_hash` 是否为空
-3. 把消息哈希记入 `waitSignMsgs`
+2. 校验 `message_hash` 是否为合法 32 字节十六进制，且 `election_id > 0`
+3. 把 `(message_hash, election_id)` 记入 `waitSignMsgs`
 4. 回一个 `AskResponse{Result: true}`
 
 这一阶段不做真正签名，只做“是否接受进入签名流程”的确认。
@@ -708,6 +708,7 @@ Manager 的业务层并不直接操作连接对象，而是统一通过 `IWebsoc
 
 - keygen 不是只拿一个节点的返回值
 - Manager 需要确认所有参与节点产出的聚合公钥一致
+- 本轮参与成员优先使用 `KeygenRequest.nodes`；如果调用方没传，才回退到 `manager.nodes`
 
 ## 11. 完整时序：从启动到业务执行
 

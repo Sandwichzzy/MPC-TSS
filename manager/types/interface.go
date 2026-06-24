@@ -18,5 +18,5 @@ type ICPKStore interface {
 
 type IManagerStore interface {
 	ICPKStore
-	message.IMessageHashStore
+	message.ISignedDigestStore
 }

@@ -11,7 +11,6 @@ type Method string
 const (
 	AskMessageHash  Method = "askMessageHash"
 	TransactionSign Method = "TransactionSign"
-	SignSlash       Method = "signSlash"
 
 	CulpritErrorCode = 100 // CulpritErrorCode 标记某个节点被判定为作恶时的错误码。
 )
@@ -69,7 +68,7 @@ type SignatureData struct {
 	M []byte `json:"m,omitempty"`
 }
 
-type BatchSubmitterResponse struct {
-	// 批量提交流程返回的签名。
+type DigestSignResponse struct {
+	// 任意 32 字节 digest 的阈值签名结果。
 	Signature []byte `json:"signature"`
 }

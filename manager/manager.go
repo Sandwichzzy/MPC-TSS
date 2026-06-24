@@ -110,12 +110,12 @@ func (m *Manager) TransactionSign(request tss.TransactionSignRequest) ([]byte, e
 	//check sig cache first
 	if sig := m.getStateSignature(digestBz, request.ElectionId, cpkData.Cpk); len(sig) > 0 {
 		log.Info("get stored signature ", "digest", hex.EncodeToString(digestBz), "sig", hex.EncodeToString(sig), "election_id", request.ElectionId)
-		response := tss.BatchSubmitterResponse{
+		response := tss.DigestSignResponse{
 			Signature: sig,
 		}
 		responseBytes, err := json.Marshal(response)
 		if err != nil {
-			log.Error("batch submitter response failed to marshal !")
+			log.Error("digest sign response failed to marshal")
 			return nil, err
 		}
 		return responseBytes, nil
@@ -156,17 +156,17 @@ func (m *Manager) TransactionSign(request tss.TransactionSignRequest) ([]byte, e
 
 	m.metrics.SignCount.Set(0)
 	absents := make([]string, 0)
-	if err = m.afterTransactionSign(ctx, request.MessageHash, absents); err != nil {
+	if err = m.recordSignedDigest(ctx, request.MessageHash, absents); err != nil {
 		log.Error("failed to execute afterSign", "err", err)
 	}
 	m.setStateSignature(digestBz, request.ElectionId, cpkData.Cpk, resp.Signature)
 
-	response := tss.BatchSubmitterResponse{
+	response := tss.DigestSignResponse{
 		Signature: resp.Signature,
 	}
 	responseBytes, err := json.Marshal(response)
 	if err != nil {
-		log.Error("batch submitter response failed to marshal !")
+		log.Error("digest sign response failed to marshal")
 		return nil, err
 	}
 	return responseBytes, nil
@@ -210,15 +210,15 @@ func (m *Manager) availableNodes(tssMembers []string) []string {
 	return availableNodes
 }
 
-func (m *Manager) afterTransactionSign(ctx types.Context, MessageHash string, absentNodes []string) error {
-	sbi := message.MessageHashInfo{
-		MessageHash:  MessageHash,
+func (m *Manager) recordSignedDigest(ctx types.Context, messageHash string, absentNodes []string) error {
+	info := message.SignedDigestInfo{
+		MessageHash:  messageHash,
 		ElectionId:   ctx.ElectionId(),
 		AbsentNodes:  absentNodes,
 		WorkingNodes: ctx.AvailableNodes(),
 	}
-	log.Info("Store the signed state batch", " messageHash", MessageHash)
-	if err := m.store.SetMessageHash(sbi); err != nil {
+	log.Info("store signed digest metadata", "message_hash", messageHash)
+	if err := m.store.SetSignedDigest(info); err != nil {
 		return err
 	}
 	return nil

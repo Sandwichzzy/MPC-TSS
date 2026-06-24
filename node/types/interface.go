@@ -7,7 +7,7 @@ type TssMembers struct {
 }
 
 type NodeStore interface {
-	message.IMessageHashStore
+	message.ISignedDigestStore
 	TssMemberStore
 }
 
