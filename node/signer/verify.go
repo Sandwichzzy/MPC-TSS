@@ -49,7 +49,7 @@ func (p *Processor) Verify() {
 					continue
 				}
 
-				p.UpdateWaitSignEvents(hashStr, askRequest)
+				p.UpdateWaitSignEvents(buildWaitSignKey(hashStr, askRequest.ElectionId), askRequest)
 
 				askResponse := common.AskResponse{
 					Result: true,

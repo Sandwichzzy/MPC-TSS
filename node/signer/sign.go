@@ -93,7 +93,7 @@ func (p *Processor) Sign() {
 func (p *Processor) SignGo(resId tmtypes.JSONRPCStringID, sign tsscommon.NodeSignRequest, logger zerolog.Logger) error {
 	var data []byte
 	requestBody := sign.RequestBody.(tsscommon.TransactionSignRequest)
-	err, hash, cacheKey, signByte := p.checkMessages(requestBody, sign.ClusterPublicKey)
+	err, hash, waitSignKey, cacheKey, signByte := p.checkMessages(requestBody, sign.ClusterPublicKey)
 	hashStr := hexutil.Encode(hash)
 
 	if err != nil {
@@ -140,34 +140,39 @@ func (p *Processor) SignGo(resId tmtypes.JSONRPCStringID, sign tsscommon.NodeSig
 		if err != nil {
 			logger.Err(err).Msg("failed to store MessageHash to level db")
 		}
-		p.removeWaitEvent(hashStr)
+		p.removeWaitEvent(waitSignKey)
 		return nil
 	}
 
 }
 
 // checkMessages 检查该请求是否已经在 ask 阶段被记录到 `waitSignMsgs`, 并检查是否缓存里有签名数据
-func (p *Processor) checkMessages(sign tsscommon.TransactionSignRequest, clusterPublicKey string) (err error, hashByte []byte, cacheKey string, signByte []byte) {
+func (p *Processor) checkMessages(sign tsscommon.TransactionSignRequest, clusterPublicKey string) (err error, hashByte []byte, waitSignKey, cacheKey string, signByte []byte) {
 	hashByte, err = hex.DecodeString(sign.MessageHash)
 	if err != nil {
-		return err, hashByte, "", nil
+		return err, hashByte, "", "", nil
 	}
 	hashStr := hexutil.Encode(hashByte)
+	waitSignKey = buildWaitSignKey(hashStr, sign.ElectionId)
 	cacheKey = buildSignCacheKey(hashStr, sign.ElectionId, clusterPublicKey)
 
 	signByte, ok := p.GetSign(cacheKey)
 	if ok {
-		return nil, hashByte, cacheKey, signByte
+		return nil, hashByte, waitSignKey, cacheKey, signByte
 	}
 
 	p.waitSignLock.RLock()
 	defer p.waitSignLock.RUnlock()
-	_, ok = p.waitSignMsgs[hashStr]
+	_, ok = p.waitSignMsgs[waitSignKey]
 	if !ok {
-		return errors.New("sign request has the unverified state batch"), nil, "", nil
+		return errors.New("sign request has the unverified state batch"), nil, "", "", nil
 	}
 
-	return nil, hashByte, cacheKey, nil
+	return nil, hashByte, waitSignKey, cacheKey, nil
+}
+
+func buildWaitSignKey(hashStr string, electionId uint64) string {
+	return fmt.Sprintf("%s:%d", hashStr, electionId)
 }
 
 func buildSignCacheKey(hashStr string, electionId uint64, clusterPublicKey string) string {

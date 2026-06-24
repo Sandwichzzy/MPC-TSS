@@ -4,6 +4,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 
@@ -26,7 +27,7 @@ type Manager struct {
 	cpkConfirmTimeout   time.Duration
 	askTimeout          time.Duration
 	signTimeout         time.Duration
-	stateSignatureCache map[[32]byte][]byte
+	stateSignatureCache map[string][]byte
 	sigCacheLock        *sync.RWMutex
 	stopGenKey          bool
 	stopChan            chan struct{}
@@ -68,7 +69,7 @@ func NewManager(wsServer server.IWebsocketManager, store types.IManagerStore, co
 		cpkConfirmTimeout:   cpkConfirmTimeoutDur,
 		askTimeout:          askTimeoutDur,
 		signTimeout:         signTimeoutDur,
-		stateSignatureCache: make(map[[32]byte][]byte),
+		stateSignatureCache: make(map[string][]byte),
 		sigCacheLock:        &sync.RWMutex{},
 		stopChan:            make(chan struct{}),
 		metrics:             metrics.PrometheusMetrics("tssmanager"),
@@ -98,9 +99,17 @@ func (m *Manager) TransactionSign(request tss.TransactionSignRequest) ([]byte, e
 	if err != nil {
 		return nil, err
 	}
+
+	cpkData, err := m.store.GetByElectionId(request.ElectionId)
+	if err != nil {
+		return nil, err
+	}
+	if len(cpkData.Cpk) == 0 {
+		return nil, fmt.Errorf("cluster public key not found for election_id %d", request.ElectionId)
+	}
 	//check sig cache first
-	if sig := m.getStateSignature(digestBz); len(sig) > 0 {
-		log.Info("get stored signature ", "digest", hex.EncodeToString(digestBz), "sig", hex.EncodeToString(sig))
+	if sig := m.getStateSignature(digestBz, request.ElectionId, cpkData.Cpk); len(sig) > 0 {
+		log.Info("get stored signature ", "digest", hex.EncodeToString(digestBz), "sig", hex.EncodeToString(sig), "election_id", request.ElectionId)
 		response := tss.BatchSubmitterResponse{
 			Signature: sig,
 		}
@@ -110,14 +119,6 @@ func (m *Manager) TransactionSign(request tss.TransactionSignRequest) ([]byte, e
 			return nil, err
 		}
 		return responseBytes, nil
-	}
-
-	cpkData, err := m.store.GetByElectionId(request.ElectionId)
-	if err != nil {
-		return nil, err
-	}
-	if len(cpkData.Cpk) == 0 {
-		return nil, fmt.Errorf("cluster public key not found for election_id %d", request.ElectionId)
 	}
 
 	members := cpkData.TssMembers
@@ -158,7 +159,7 @@ func (m *Manager) TransactionSign(request tss.TransactionSignRequest) ([]byte, e
 	if err = m.afterTransactionSign(ctx, request.MessageHash, absents); err != nil {
 		log.Error("failed to execute afterSign", "err", err)
 	}
-	m.setStateSignature(digestBz, resp.Signature)
+	m.setStateSignature(digestBz, request.ElectionId, cpkData.Cpk, resp.Signature)
 
 	response := tss.BatchSubmitterResponse{
 		Signature: resp.Signature,
@@ -172,7 +173,11 @@ func (m *Manager) TransactionSign(request tss.TransactionSignRequest) ([]byte, e
 }
 
 func (m *Manager) Keygen(request tss.KeygenRequest) (string, error) {
-	cpk, err := m.generateKey(m.tssMembers, request.Threshold, request.ElectionId, request.RequestId)
+	tssMembers := request.Nodes
+	if len(tssMembers) == 0 {
+		tssMembers = m.tssMembers
+	}
+	cpk, err := m.generateKey(tssMembers, request.Threshold, request.ElectionId, request.RequestId)
 	if err != nil {
 		log.Error("failed to generate key", "err", err)
 		return "0x", err
@@ -181,7 +186,7 @@ func (m *Manager) Keygen(request tss.KeygenRequest) (string, error) {
 		Cpk:          cpk,
 		ElectionId:   request.ElectionId,
 		Threshold:    request.Threshold,
-		TssMembers:   m.tssMembers,
+		TssMembers:   tssMembers,
 		CreationTime: time.Now(),
 	}); err != nil {
 		log.Error("failed to get cpk from storage", "err", err)
@@ -219,21 +224,28 @@ func (m *Manager) afterTransactionSign(ctx types.Context, MessageHash string, ab
 	return nil
 }
 
-func (m *Manager) getStateSignature(digestBz []byte) []byte {
+func buildStateSignatureCacheKey(digestBz []byte, electionId uint64, clusterPublicKey string) string {
+	normalizedClusterKey := strings.TrimSpace(clusterPublicKey)
+	normalizedClusterKey = strings.TrimPrefix(normalizedClusterKey, "0x")
+	normalizedClusterKey = strings.TrimPrefix(normalizedClusterKey, "0X")
+	normalizedClusterKey = strings.ToLower(normalizedClusterKey)
+
+	return fmt.Sprintf("%s:%d:%s", hex.EncodeToString(digestBz), electionId, normalizedClusterKey)
+}
+
+func (m *Manager) getStateSignature(digestBz []byte, electionId uint64, clusterPublicKey string) []byte {
 	m.sigCacheLock.RLock()
 	defer m.sigCacheLock.RUnlock()
-	var key [32]byte
-	copy(key[:], digestBz)
+	key := buildStateSignatureCacheKey(digestBz, electionId, clusterPublicKey)
 	return m.stateSignatureCache[key]
 }
 
-func (m *Manager) setStateSignature(digestBz []byte, sig []byte) {
+func (m *Manager) setStateSignature(digestBz []byte, electionId uint64, clusterPublicKey string, sig []byte) {
 	m.sigCacheLock.Lock()
 	defer m.sigCacheLock.Unlock()
 	for key := range m.stateSignatureCache {
 		delete(m.stateSignatureCache, key)
 	}
-	var key [32]byte
-	copy(key[:], digestBz)
+	key := buildStateSignatureCacheKey(digestBz, electionId, clusterPublicKey)
 	m.stateSignatureCache[key] = sig
 }
