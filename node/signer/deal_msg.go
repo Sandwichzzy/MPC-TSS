@@ -41,6 +41,10 @@ func (p *Processor) ProcessMessage() {
 				} else if rpcReq.Method == "keygen" {
 					if err := p.writeChan(p.keygenRequestChan, rpcReq); err != nil {
 						logger.Err(err).Msg("failed to write msg to keygen channel,channel blocked")
+						rpcResponse := tmtypes.NewRPCErrorResponse(rpcReq.ID, 202, "node busy", "keygen request queue is full, node is still processing a previous keygen request")
+						if sendErr := p.wsClient.SendMsg(rpcResponse); sendErr != nil {
+							logger.Err(sendErr).Msg("failed to send busy response to manager")
+						}
 					}
 				} else {
 					logger.Error().Msgf("unknown rpc request method : %s ", rpcReq.Method)

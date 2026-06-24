@@ -4,7 +4,9 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"math/big"
+	"strings"
 
 	tsscommon "github.com/Sandwichzzy/tss/common"
 	"github.com/Sandwichzzy/tss/message"
@@ -91,7 +93,7 @@ func (p *Processor) Sign() {
 func (p *Processor) SignGo(resId tmtypes.JSONRPCStringID, sign tsscommon.NodeSignRequest, logger zerolog.Logger) error {
 	var data []byte
 	requestBody := sign.RequestBody.(tsscommon.TransactionSignRequest)
-	err, hash, signByte := p.checkMessages(requestBody)
+	err, hash, cacheKey, signByte := p.checkMessages(requestBody, sign.ClusterPublicKey)
 	hashStr := hexutil.Encode(hash)
 
 	if err != nil {
@@ -116,7 +118,7 @@ func (p *Processor) SignGo(resId tmtypes.JSONRPCStringID, sign tsscommon.NodeSig
 			}
 			return err
 		}
-		bol := p.CacheSign(hashStr, signData)
+		bol := p.CacheSign(cacheKey, signData)
 		logger.Info().Msgf("cache sign byte behavior %t", bol)
 		data = signData
 	} else {
@@ -145,26 +147,36 @@ func (p *Processor) SignGo(resId tmtypes.JSONRPCStringID, sign tsscommon.NodeSig
 }
 
 // checkMessages 检查该请求是否已经在 ask 阶段被记录到 `waitSignMsgs`, 并检查是否缓存里有签名数据
-func (p *Processor) checkMessages(sign tsscommon.TransactionSignRequest) (err error, hashByte, signByte []byte) {
+func (p *Processor) checkMessages(sign tsscommon.TransactionSignRequest, clusterPublicKey string) (err error, hashByte []byte, cacheKey string, signByte []byte) {
 	hashByte, err = hex.DecodeString(sign.MessageHash)
 	if err != nil {
-		return err, hashByte, nil
+		return err, hashByte, "", nil
 	}
 	hashStr := hexutil.Encode(hashByte)
+	cacheKey = buildSignCacheKey(hashStr, sign.ElectionId, clusterPublicKey)
 
-	signByte, ok := p.GetSign(hashStr)
+	signByte, ok := p.GetSign(cacheKey)
 	if ok {
-		return nil, hashByte, signByte
+		return nil, hashByte, cacheKey, signByte
 	}
 
 	p.waitSignLock.RLock()
 	defer p.waitSignLock.RUnlock()
 	_, ok = p.waitSignMsgs[hashStr]
 	if !ok {
-		return errors.New("sign request has the unverified state batch"), nil, nil
+		return errors.New("sign request has the unverified state batch"), nil, "", nil
 	}
 
-	return nil, hashByte, nil
+	return nil, hashByte, cacheKey, nil
+}
+
+func buildSignCacheKey(hashStr string, electionId uint64, clusterPublicKey string) string {
+	normalizedClusterKey := strings.TrimSpace(clusterPublicKey)
+	normalizedClusterKey = strings.TrimPrefix(normalizedClusterKey, "0x")
+	normalizedClusterKey = strings.TrimPrefix(normalizedClusterKey, "0X")
+	normalizedClusterKey = strings.ToLower(normalizedClusterKey)
+
+	return fmt.Sprintf("%s:%d:%s", hashStr, electionId, normalizedClusterKey)
 }
 
 func (p *Processor) CacheSign(key string, value []byte) bool {

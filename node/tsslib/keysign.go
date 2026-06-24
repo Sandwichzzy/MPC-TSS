@@ -47,10 +47,7 @@ func (t *TssServer) KeySign(req keysign2.Request) (keysign2.Response, error) {
 		}
 	}
 
-	_, ok := t.participants[req.PoolPubKey]
-	if !ok {
-		t.participants[req.PoolPubKey] = localStateItem.ParticipantKeys
-	}
+	t.setParticipants(req.PoolPubKey, localStateItem.ParticipantKeys)
 	//check signers if not contained in participants
 	err = t.isContainPubkeys(req.SignerPubKeys, localStateItem.ParticipantKeys, req.PoolPubKey)
 	if err != nil {
@@ -110,11 +107,21 @@ func (t *TssServer) KeySign(req keysign2.Request) (keysign2.Response, error) {
 }
 
 func (t *TssServer) GetParticipants(poolPubkey string) ([]string, error) {
+	t.participantsLock.RLock()
+	defer t.participantsLock.RUnlock()
+
 	value, ok := t.participants[poolPubkey]
 	if !ok {
 		return nil, errors.New("There is wrong in participants map, need to store latest pool pubkey's participants!")
 	}
-	return value, nil
+	return append([]string(nil), value...), nil
+}
+
+func (t *TssServer) setParticipants(poolPubkey string, participants []string) {
+	t.participantsLock.Lock()
+	defer t.participantsLock.Unlock()
+
+	t.participants[poolPubkey] = append([]string(nil), participants...)
 }
 
 func (t *TssServer) generateSignature(onlinePeers []peer.ID, req keysign2.Request, localStateItem storage.KeygenLocalState, keysignInstance *keysign2.TssKeySign) (keysign2.Response, error) {

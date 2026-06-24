@@ -35,6 +35,7 @@ type TssServer struct {
 	p2pCommunication    *p2p2.Communication
 	localNodePubKey     string
 	participants        map[string][]string
+	participantsLock    *sync.RWMutex
 	preParams           *bkeygen.LocalPreParams
 	tssKeyGenLocker     *sync.Mutex
 	stopChan            chan struct{}
@@ -185,6 +186,7 @@ func NewTss(
 		p2pCommunication:    comm,
 		localNodePubKey:     pubkeyHex,
 		participants:        make(map[string][]string),
+		participantsLock:    &sync.RWMutex{},
 		preParams:           preParams,
 		tssKeyGenLocker:     &sync.Mutex{},
 		stopChan:            make(chan struct{}),

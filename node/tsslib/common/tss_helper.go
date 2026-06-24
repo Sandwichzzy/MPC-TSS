@@ -179,10 +179,12 @@ func (t *TssCommon) NotifyTaskDone() error {
 	peers := t.P2PPeers
 	defer t.P2PPeersLock.RUnlock()
 
-	t.renderToP2P(&messages.BroadcastMsgChan{
+	if err := t.renderToP2P(&messages.BroadcastMsgChan{
 		WrappedMessage: wrappedMsg,
 		PeersID:        peers,
-	})
+	}); err != nil {
+		return fmt.Errorf("fail to enqueue task-done notification: %w", err)
+	}
 	return nil
 }
 

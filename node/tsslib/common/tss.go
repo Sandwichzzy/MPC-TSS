@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/Sandwichzzy/tss/node/tsslib/abnormal"
 	"github.com/Sandwichzzy/tss/node/tsslib/conversion"
@@ -19,6 +20,8 @@ import (
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 )
+
+const broadcastEnqueueTimeout = 2 * time.Second
 
 // TssCommon 它不是具体的 keygen/keysign 算法实现，但负责：
 //
@@ -208,6 +211,7 @@ func (t *TssCommon) ProcessOutCh(msg tss.Message, msgType messages.TSSMessageTpe
 	if err != nil {
 		return fmt.Errorf("fail to get wire bytes: %w", err)
 	}
+	var sendErr error
 	//按广播/单播缓存到
 	if r.IsBroadcast {
 		//todo :这里用Moniker 还是 id
@@ -232,11 +236,15 @@ func (t *TssCommon) ProcessOutCh(msg tss.Message, msgType messages.TSSMessageTpe
 		err := t.sendBulkMsg(wiredMsgType, msgType, wiredMsg)
 		if err != nil {
 			t.logger.Error().Err(err).Msg("error in send bulk message")
-			return true
+			sendErr = err
+			return false
 		}
 		t.cachedWireUnicastMsgLists.Delete(key)
 		return true
 	})
+	if sendErr != nil {
+		return sendErr
+	}
 	t.cachedWireBroadcastMsgLists.Range(func(key, value interface{}) bool {
 		wiredMsg := value.(BulkWireMsg)
 		wiredMsgType := key.(string)
@@ -244,12 +252,16 @@ func (t *TssCommon) ProcessOutCh(msg tss.Message, msgType messages.TSSMessageTpe
 		err := t.sendBulkMsg(wiredMsgType, msgType, wiredMsg)
 		if err != nil {
 			t.logger.Error().Err(err).Msg("error in send bulk message")
-			return true
+			sendErr = err
+			return false
 		}
 		t.cachedWireBroadcastMsgLists.Delete(key)
 
 		return true
 	})
+	if sendErr != nil {
+		return sendErr
+	}
 
 	return nil
 }
@@ -376,10 +388,12 @@ func (t *TssCommon) sendBulkMsg(wiredMsgType string, tssMsgType messages.TSSMess
 			peerIDs = append(peerIDs, peerID.(peer.ID))
 		}
 	}
-	t.renderToP2P(&messages.BroadcastMsgChan{
+	if err := t.renderToP2P(&messages.BroadcastMsgChan{
 		WrappedMessage: wrappedMsg,
 		PeersID:        peerIDs,
-	})
+	}); err != nil {
+		return fmt.Errorf("fail to enqueue outbound %s message: %w", tssMsgType.String(), err)
+	}
 	return nil
 }
 
@@ -543,12 +557,29 @@ func (t *TssCommon) updateLocal(wireMsg *messages.WireMessage) error {
 }
 
 // renderToP2P 将待发送消息交给外部 P2P 广播通道。
-func (t *TssCommon) renderToP2P(broadcastMsg *messages.BroadcastMsgChan) {
+// 这里不能无限阻塞，否则 P2P 消费方一旦卡住，整个 keygen/keysign 状态机都会被拖死。
+func (t *TssCommon) renderToP2P(broadcastMsg *messages.BroadcastMsgChan) error {
 	if t.broadcastChannel == nil {
 		t.logger.Warn().Msg("broadcast channel is not set")
-		return
+		return errors.New("broadcast channel is not set")
 	}
-	t.broadcastChannel <- broadcastMsg
+
+	timer := time.NewTimer(broadcastEnqueueTimeout)
+	defer timer.Stop()
+
+	select {
+	case t.broadcastChannel <- broadcastMsg:
+		return nil
+	case <-timer.C:
+		return fmt.Errorf(
+			"p2p broadcast queue is full after %s (msg_id=%s, message_type=%d, queue_len=%d, queue_cap=%d)",
+			broadcastEnqueueTimeout,
+			broadcastMsg.WrappedMessage.MsgID,
+			broadcastMsg.WrappedMessage.MessageType,
+			len(t.broadcastChannel),
+			cap(t.broadcastChannel),
+		)
+	}
 }
 
 // processTSSMsg 校验签名后处理单播或广播 TSS 消息。
