@@ -3,7 +3,6 @@ package config
 import (
 	"errors"
 	"fmt"
-	"path"
 	"path/filepath"
 	"strings"
 	"time"
@@ -111,13 +110,9 @@ func DefaultConfiguration() Configuration {
 // LoadConfig 从配置文件和环境变量中加载系统配置。
 // 加载顺序：默认配置 -> 配置文件 -> 环境变量覆盖。
 func LoadConfig(file string) (Configuration, error) {
-	// 添加配置文件搜索路径：
-	// 1. 当前工作目录
-	// 2. 配置文件所在目录
-	viper.AddConfigPath(".")
-	viper.AddConfigPath(filepath.Dir(file))
-	// 设置配置文件名（不包含扩展名）
-	viper.SetConfigName(strings.Split(path.Base(file), ".")[0])
+	// 直接按传入路径读取配置文件，避免 `xxx.docker.toml`
+	// 这类多段文件名被错误截断成 `xxx`。
+	viper.SetConfigFile(filepath.Clean(file))
 
 	// 读取配置文件内容
 	if err := viper.ReadInConfig(); err != nil {

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -15,6 +16,7 @@ import (
 	"github.com/Sandwichzzy/tss/node/types"
 	"github.com/libp2p/go-libp2p"
 	dht "github.com/libp2p/go-libp2p-kad-dht"
+	kbucket "github.com/libp2p/go-libp2p-kbucket"
 	"github.com/libp2p/go-libp2p/core/crypto"
 	"github.com/libp2p/go-libp2p/core/host"
 	"github.com/libp2p/go-libp2p/core/network"
@@ -35,6 +37,7 @@ const (
 	subscriberLookupRetryMax  = 3
 	subscriberLookupRetryWait = 500 * time.Millisecond
 	subscriberDeliveryTimeout = 2 * time.Second
+	dhtEmptyRoutingTableError = "failed to find any peer in table"
 )
 
 // Communication is the core TSS P2P communication layer
@@ -309,6 +312,10 @@ func (c *Communication) bootStrapConnectivityCheck() error {
 			c.logger.Error().Err(err).Msg("error in decode the bootstrap node, skip it")
 			continue
 		}
+		if peerInfo.ID == c.host.ID() {
+			c.logger.Debug().Msgf("skip self bootstrap connectivity check for peer %s", peerInfo.ID)
+			continue
+		}
 		wg.Add(1)
 		go func() {
 			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
@@ -409,7 +416,7 @@ func (c *Communication) startChannel(privKeyBytes []byte) error {
 	routingDiscovery := discovery.NewRoutingDiscovery(kademliaDHT)
 	_, err = routingDiscovery.Advertise(ctx, "rendezvous")
 	if err != nil {
-		return err
+		c.logAdvertiseFailure(err)
 	}
 
 	err = c.bootStrapConnectivityCheck()
@@ -452,6 +459,10 @@ func (c *Communication) connectToBootstrapPeers() error {
 		if err != nil {
 			return fmt.Errorf("fail to add peer: %w", err)
 		}
+		if pi.ID == c.host.ID() {
+			c.logger.Debug().Msgf("skip self bootstrap peer %s", pi.ID)
+			continue
+		}
 		wg.Add(1)
 		go func(connRet chan bool) {
 			defer wg.Done()
@@ -469,7 +480,7 @@ func (c *Communication) connectToBootstrapPeers() error {
 	wg.Wait()
 
 	var hasFail bool
-	for i := 0; i < len(c.bootstrapPeers); i++ {
+	for i := 0; i < len(connRet); i++ {
 		if <-connRet {
 			if !c.waitFullConnected {
 				return nil
@@ -482,6 +493,18 @@ func (c *Communication) connectToBootstrapPeers() error {
 		return errors.New("fail to connect to peer")
 	}
 	return nil
+}
+
+func (c *Communication) logAdvertiseFailure(err error) {
+	if isDHTEmptyRoutingTableError(err) {
+		c.logger.Warn().Err(err).Msg("rendezvous advertise skipped because DHT routing table is not ready yet")
+		return
+	}
+	c.logger.Warn().Err(err).Msg("rendezvous advertise failed, continue with bootstrap connectivity only")
+}
+
+func isDHTEmptyRoutingTableError(err error) bool {
+	return errors.Is(err, kbucket.ErrLookupFailure) || strings.Contains(err.Error(), dhtEmptyRoutingTableError)
 }
 
 // ==============================
