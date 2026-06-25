@@ -1,0 +1,23 @@
+timed_task_interval = "10s"
+
+[manager]
+nodes = [
+  "02fe2481a5431f9523286da7fcc2c1911cfede9cb038a27d24482080d46cf4e50c",
+  "024695a4bfcaa11fa8428c0fae9ce9dc16093fb95adac3be949d13dd89b845e56a",
+  "02dc8d79e4a67f1fdcad4b43f93d8f98feb4fc39c1113f64d491df1b68f93d2e17",
+]
+
+[node]
+db_dir = "/data/node2/db"
+base_dir = "/data/node2/base"
+ws_addr = "tcp://tss-manager:8081"
+http_addr = "0.0.0.0:8084"
+pre_param_file = ""
+p2p_port = "8003"
+bootstrap_peers = "/ip4/172.28.0.20/tcp/8001/p2p/16Uiu2HAmAGco75s1oGSoBG9v6horeYMGueCfgTe2sdLX5pLfPT9p,/ip4/172.28.0.21/tcp/8002/p2p/16Uiu2HAmCXjpcTfpdedNcpKqUt3WiSVgBWR97yWw5di3b55QjkeX,/ip4/172.28.0.22/tcp/8003/p2p/16Uiu2HAkzBCs5xfgCmhDrKxWy3pXmQSf2XQ3Ucoo2d6NJBXJsvnd"
+external_ip = "172.28.0.22"
+key_gen_timeout = "60s"
+key_sign_timeout = "60s"
+pre_param_timeout = "5m0s"
+private_key = "e58a5288c654a54a81f1d79fff0b00c96eefbdc4fbe5c5e01814b33544cbbef6"
+gas_limit_scaler = 15

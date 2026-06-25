@@ -1,0 +1,80 @@
+services:
+  tss-manager:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: tss-manager
+    command: ["manager", "-c", "/app/tssmanage.docker.toml"]
+    volumes:
+      - .:/app
+      - ./data/manager:/data/manager
+    ports:
+      - "8080:8080"
+      - "8081:8081"
+    networks:
+      tssnet:
+        ipv4_address: 172.28.0.10
+
+  tss-node0:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: tss-node0
+    command: ["node", "-c", "/app/tssnode0.docker.toml", "--debug"]
+    depends_on:
+      - tss-manager
+    volumes:
+      - .:/app
+      - ./data/node0/db:/data/node0/db
+      - ./data/node0/base:/data/node0/base
+    ports:
+      - "8082:8082"
+      - "18001:8001"
+    networks:
+      tssnet:
+        ipv4_address: 172.28.0.20
+
+  tss-node1:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: tss-node1
+    command: ["node", "-c", "/app/tssnode1.docker.toml", "--debug"]
+    depends_on:
+      - tss-manager
+    volumes:
+      - .:/app
+      - ./data/node1/db:/data/node1/db
+      - ./data/node1/base:/data/node1/base
+    ports:
+      - "8083:8083"
+      - "18002:8002"
+    networks:
+      tssnet:
+        ipv4_address: 172.28.0.21
+
+  tss-node2:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: tss-node2
+    command: ["node", "-c", "/app/tssnode2.docker.toml", "--debug"]
+    depends_on:
+      - tss-manager
+    volumes:
+      - .:/app
+      - ./data/node2/db:/data/node2/db
+      - ./data/node2/base:/data/node2/base
+    ports:
+      - "8084:8084"
+      - "18003:8003"
+    networks:
+      tssnet:
+        ipv4_address: 172.28.0.22
+
+networks:
+  tssnet:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.28.0.0/16

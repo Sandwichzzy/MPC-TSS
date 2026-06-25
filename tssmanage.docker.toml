@@ -1,0 +1,15 @@
+timed_task_interval = "10s"
+
+[manager]
+ws_addr = "tcp://0.0.0.0:8081"
+http_addr = "0.0.0.0:8080"
+db_dir = "/data/manager"
+keygen_timeout = "120s"
+cpk_confirm_timeout = "2h"
+ask_timeout = "60s"
+sign_timeout = "60s"
+nodes = [
+  "02fe2481a5431f9523286da7fcc2c1911cfede9cb038a27d24482080d46cf4e50c",
+  "024695a4bfcaa11fa8428c0fae9ce9dc16093fb95adac3be949d13dd89b845e56a",
+  "02dc8d79e4a67f1fdcad4b43f93d8f98feb4fc39c1113f64d491df1b68f93d2e17",
+]

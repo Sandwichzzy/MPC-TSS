@@ -1,0 +1,11 @@
+{
+  "nodes": [
+    "02fe2481a5431f9523286da7fcc2c1911cfede9cb038a27d24482080d46cf4e50c",
+    "024695a4bfcaa11fa8428c0fae9ce9dc16093fb95adac3be949d13dd89b845e56a",
+    "02dc8d79e4a67f1fdcad4b43f93d8f98feb4fc39c1113f64d491df1b68f93d2e17"
+  ],
+  "election_id": 10001,
+  "request_id": "keygen-10001",
+  "threshold": 1,
+  "timestamp": 1750000000000
+}

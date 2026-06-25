@@ -1,0 +1,16 @@
+.git
+.gitignore
+.codex
+.claude
+.idea
+.vscode
+
+tss
+data
+
+coverage.*
+*.out
+*.test
+profile.cov
+
+node_modules
