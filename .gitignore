@@ -39,3 +39,4 @@ go.work.sum
 AGENTS.md
 # Binaries for programs and plugins
 tss
+data/

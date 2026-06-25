@@ -1126,6 +1126,27 @@ Node signer        TssServer          TssKeyGen/TssCommon         Communication/
     |<-----------------| keygen.Response      |                            |                        |
 ```
 
+这张图描述 Node 内部执行 keygen 的完整链路。`node/signer/keygen.go` 收到
+Manager 通过 WebSocket 下发的 keygen 请求后，会把它转换成 `keygen.Request`
+并调用 `TssServer.Keygen(...)`。`TssServer` 先做请求校验，确认本节点属于参与方，
+再根据参与节点集合生成本轮 `msgID`，并在 `Communication` 上订阅该 `msgID`，
+这样后续收到的 p2p round message 才能被路由回这一轮 keygen。
+
+订阅建立后，`TssServer` 创建 `TssKeyGen`，进入 `GenerateNewKey(...)`。
+`TssKeyGen` 会基于参与方列表、阈值、本地 preparams 和 `tss-lib` 参数创建
+keygen local party，然后启动 `ProcessInbound` 和 `party.Start()`。本地 party
+从 `outCh` 产出的 round message 会先经过 `TssCommon` 包装、签名，再交给
+`Communication/libp2p` 写入 stream，发送给其他参与节点。其他节点发回的消息
+则通过 libp2p stream 进入本节点，经过解包、验签、按 `msgID` 投递后，由
+`ProcessInbound` 调用 `party.UpdateFromBytes(...)` 喂给本地 party。
+
+多轮 round message 交换完成后，`tss-lib` 会在 `endCh` 产出
+`LocalPartySaveData`。这份数据包含本节点的 key share、公钥和参与方信息，是后续
+keysign 的长期依赖。当前节点会把它转换为 `KeygenLocalState` 并写入本地存储，
+同时广播 task done，让其他节点知道本轮 keygen 已完成。最后 `TssServer` 把
+聚合公钥包装成 `keygen.Response` 返回给 `node/signer/keygen.go`，再由 signer
+通过 WebSocket 回传给 Manager。
+
 ### 11.2 keysign 时序
 
 ```text
@@ -1152,6 +1173,27 @@ Node signer        TssServer          TssKeySign/TssCommon        Communication/
     |                  |                      | notify task done           |                        |
     |<-----------------| keysign.Response     |                            |                        |
 ```
+
+这张图描述 Node 内部执行 keysign 的完整链路。`node/signer/sign.go` 在完成
+ask 前置检查后，会把待签的 32 字节 digest、参与签名节点列表和聚合公钥转换成
+`keysign.Request`，并调用 `TssServer.KeySign(...)`。`TssServer` 先做基础校验，
+再根据聚合公钥加载对应的 `KeygenLocalState`，也就是 keygen 阶段保存下来的本地
+key share。如果内存中的 `participants` 缓存缺失，keysign 路径也会尝试从
+`KeygenLocalState.ParticipantKeys` 恢复参与方信息。
+
+状态加载完成后，`TssServer` 会确认本节点确实属于本次 signer 集合，然后基于
+待签 digest 和 signer 集合生成本轮 keysign `msgID`，并建立 keysign 消息订阅。
+随后创建 `TssKeySign` 并进入 `SignMessage(...)`。`TssKeySign` 使用本地
+`KeygenLocalState`、待签 digest、参与方参数和 `tss-lib` signing party 创建
+本地签名 party，启动入站处理，然后由 local party 产生出站 round message。
+
+keysign 的 p2p 消息流转方式和 keygen 一致：本地 `outCh` 的消息会被包装、签名、
+按目标 peer 发送；远端消息进入本节点后会被验签、按 `msgID` 投递，并通过
+`party.UpdateFromBytes(...)` 推进本地 signing party。多轮 round 完成后，
+`endCh` 会产出 `SignatureData`，其中包含 ECDSA 签名的 `R`、`S`、恢复字段和
+原始 digest。节点随后广播 task done，并把 `SignatureData` 包装成
+`keysign.Response` 返回给 `node/signer/sign.go`。上层 signer 再把它转换成业务层
+使用的 65 字节签名 `[R || S || V]`，通过 WebSocket 回传给 Manager。
 
 ## 12. 这套 `tsslib` 设计的几个关键特点
 

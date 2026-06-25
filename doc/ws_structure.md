@@ -141,13 +141,16 @@ HTTP /api/v1/keygen ---> |  agreement/sign/keygen     |
 | `TransactionSign` | Manager -> Node | 正式执行签名 |
 | `keygen` | Manager -> Node | 执行分布式生成聚合公钥 |
 
+`TransactionSign` 是历史命名。当前实现并不绑定具体交易或 Rollup batch，
+业务语义是对 `message_hash` 表示的 32 字节 digest 做 threshold ECDSA 签名。
+
 ### 4.3 业务 payload
 
 这些业务结构定义在 `common/types.go`：
 
 | 结构 | 用途 |
 | --- | --- |
-| `TransactionSignRequest` | 签名请求，包含 `message_hash`、`election_id`、`request_id` |
+| `TransactionSignRequest` | digest 签名请求，包含 `message_hash`、`election_id`、`request_id` |
 | `AskResponse` | ask 阶段的响应，只有一个 `Result bool` |
 | `NodeSignRequest` | 发给节点的正式签名请求，包含 `cluster_public_key`、参与节点列表、原始请求体 |
 | `SignResponse` | 节点返回的签名结果 |
@@ -633,6 +636,9 @@ Node 的 WebSocket 消费入口在 `node/signer/deal_msg.go` 的 `ProcessMessage
 6. 把签名整理成 `SignResponse`
 7. 通过 WebSocket 回给 Manager
 
+这里签名的输入是 `message_hash` 解码后的 32 字节 digest，Node 不解析交易、不理解链上下文，
+也不做 Rollup batch 语义判断。
+
 也就是说，Node 侧把 `ask -> sign` 做成了两阶段流程：
 
 - ask 阶段把消息加入待签名集合
@@ -735,6 +741,14 @@ Node Processor                 WSClients/tm.WSClient           Manager WSServer/
      | websocket ready                   |                                   |
 ```
 
+这张图描述 Node 启动后如何接入 Manager 的 WebSocket 控制面。Node 侧先创建
+`WSClient`，底层 `tm.WSClient` 使用节点私钥对当前时间戳签名，并把 `pubKey`、
+`sig`、`time` 放到 `/ws` 握手请求里。Manager 校验请求头和签名后升级为
+WebSocket 连接，把该节点公钥注册到 `sendChan` 和 `aliveNodes`，后续 Manager
+就可以按节点公钥向指定 Node 下发 `askMessageHash`、`TransactionSign` 和
+`keygen` 请求。连接建立成功后，Node 侧会启动读、写、重连循环，WebSocket
+只承担任务调度和结果回传，不承载 TSS round message。
+
 ### 11.2 签名流程时序
 
 ```text
@@ -763,6 +777,17 @@ HTTP Caller          Manager                 Node                    node/tsslib
     |<-----------------| return signature     |                             |
 ```
 
+这张图描述 `/api/v1/sign` 的完整控制流程。HTTP 调用方把 `message_hash`、
+`election_id`、`request_id` 发给 Manager 后，Manager 先执行 `agreement()`：
+注册 `ASK_<requestId>` 响应通道，并向候选节点发送 `askMessageHash`。Node 的
+`Verify()` 校验 `message_hash` 是合法 32 字节 digest、`election_id` 有效后，
+把 `(message_hash, election_id)` 写入 `waitSignMsgs`，并返回 `AskResponse`。
+Manager 只选择通过 ask 的节点作为 approvers，再发送正式 `TransactionSign`。
+Node 的 `Sign()` 会先检查该 digest 是否已经通过 ask，随后调用
+`tssServer.KeySign(...)` 进入 node/tsslib 和 p2p 层，由参与节点交换 TSS 协议消息。
+任一节点返回签名后，Manager 会用对应 election 的聚合公钥验签，验签通过才把
+`signature` 返回给 HTTP 调用方。
+
 ### 11.3 keygen 流程时序
 
 ```text
@@ -782,6 +807,16 @@ HTTP Caller          Manager                 Node                    node/tsslib
     |                  | compare all CPKs     |                             |
     |<-----------------| return CPK           |                             |
 ```
+
+这张图描述 `/api/v1/keygen` 的完整控制流程。HTTP 调用方提交本轮参与节点、
+`election_id`、`request_id` 和 `threshold` 后，Manager 执行 `generateKey()`：
+先筛出在线且属于本轮成员集的节点，再注册 `requestId` 响应通道，并向这些节点
+发送 `keygen` 请求。Node 的 `Keygen()` 解析请求后调用 `tssServer.Keygen(...)`，
+真正的分布式 keygen 在 node/tsslib 内部启动本地 party，并通过 libp2p 在节点间
+交换 TSS round message。每个节点完成后返回 `KeygenResponse(CPK)`；Manager
+会比较所有返回的聚合公钥是否一致，只有全部一致才认为本轮 keygen 成功，并把
+CPK 返回给 HTTP 调用方，同时写入 manager 本地存储，供后续 digest 签名按
+`election_id` 查找使用。
 
 ## 12. 这个 WebSocket 设计的几个关键特点
 
