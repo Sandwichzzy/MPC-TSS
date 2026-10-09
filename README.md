@@ -1,5 +1,7 @@
 # TSS
 
+[简体中文](README.md) | [English](README.en.md)
+
 Go 实现的 MPC Threshold Signature Scheme 服务。项目由一个协调服务和多个签名节点组成：
 
 - `manager`：提供 HTTP API，接收 Node 的 WebSocket 连接，协调 keygen 和 sign 流程。
@@ -230,6 +232,5 @@ Node 关键配置：
 - `node.key_gen_timeout`、`node.key_sign_timeout`、`node.pre_param_timeout`：协议执行超时
 
 不要提交生产私钥、JWT secret、AWS 凭证或真实客户状态数据。
-
 
 
